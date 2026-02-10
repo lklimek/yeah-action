@@ -29,6 +29,10 @@ jobs:
           [dependencies]
           serde = "1.0.195"
           TOML
+          mkdir -p src
+          cat <<'RS' > src/main.rs
+          fn main() {}
+          RS
           cargo generate-lockfile
 
       - name: Run YEAH action
