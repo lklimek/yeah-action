@@ -31,6 +31,10 @@ inputs:
     description: 'Run cargo geiger on changed crates'
     required: false
     default: 'true'
+  project-path:
+    description: 'Path to the Rust project to analyze (relative to repository root)'
+    required: false
+    default: '.'
   max-diff-size:
     description: 'Max diff size per crate in bytes before truncation'
     required: false
@@ -53,6 +57,7 @@ runs:
         INPUT_CARGO_AUDIT: ${{ inputs.cargo-audit }}
         INPUT_CARGO_VET: ${{ inputs.cargo-vet }}
         INPUT_CARGO_GEIGER: ${{ inputs.cargo-geiger }}
+        INPUT_PROJECT_PATH: ${{ inputs.project-path }}
         INPUT_MAX_DIFF_SIZE: ${{ inputs.max-diff-size }}
         INPUT_COMMENT_MODE: ${{ inputs.comment-mode }}
         GITHUB_TOKEN: ${{ github.token }}

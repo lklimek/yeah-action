@@ -54,6 +54,7 @@ jobs:
 | `cargo-audit` | Run cargo audit | `true` |
 | `cargo-vet` | Run cargo vet (check audit status + generate diffs) | `true` |
 | `cargo-geiger` | Run cargo geiger on changed crates | `true` |
+| `project-path` | Path to the Rust project (relative to repository root) | `.` |
 | `max-diff-size` | Max diff size per crate in bytes before truncation | `50000` |
 | `comment-mode` | `create` (new comment) or `update` (sticky comment) | `update` |
 
@@ -75,6 +76,13 @@ The comment contains:
 
 - If no API key is provided, YEAH skips the AI review and posts only tool results.
 - If `cargo vet` is not initialized (missing `supply-chain` config), diffs are skipped.
+
+## Tool Configuration Requirements
+
+- **cargo audit:** Requires a `Cargo.lock` file for the target project.
+- **cargo deny:** Provide a `deny.toml` policy file in the project directory (or disable the tool).
+- **cargo vet:** Run `cargo vet init` to generate `supply-chain/config.toml` and `supply-chain/audits.toml`.
+- **cargo geiger:** No additional configuration required.
 
 ## License
 

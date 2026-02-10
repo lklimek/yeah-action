@@ -18,28 +18,14 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Create sample Cargo.lock
+      - name: Prepare dependency change for self-test
         run: |
-          cat <<'TOML' > Cargo.toml
-          [package]
-          name = "yeah-action-self-test"
-          version = "0.1.0"
-          edition = "2021"
-
-          [dependencies]
-          serde = "1.0.195"
-          TOML
-          mkdir -p src
-          cat <<'RS' > src/main.rs
-          fn main() {}
-          RS
+          cd test-project
+          echo 'serde_json = "1.0"' >> Cargo.toml
           cargo generate-lockfile
 
       - name: Run YEAH action
         uses: ./
         with:
-          cargo-deny: 'false'
-          cargo-audit: 'false'
-          cargo-vet: 'false'
-          cargo-geiger: 'false'
+          project-path: test-project
           comment-mode: 'create'

@@ -33,8 +33,12 @@ def read_base_lockfile() -> str | None:
     base_ref = os.environ.get("GITHUB_BASE_REF")
     if not base_ref:
         return None
+    project_path = os.environ.get("YEAH_PROJECT_PATH", ".").strip()
+    lockfile_path = "Cargo.lock"
+    if project_path not in ("", "."):
+        lockfile_path = f"{project_path.rstrip('/')}/Cargo.lock"
     result = subprocess.run(
-        ["git", "show", f"origin/{base_ref}:Cargo.lock"],
+        ["git", "show", f"origin/{base_ref}:{lockfile_path}"],
         check=False,
         capture_output=True,
         text=True,
