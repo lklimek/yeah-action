@@ -1,0 +1,60 @@
+name: 'YEAH — Rust Supply Chain AI Review'
+description: 'Your CI says YEAH only to safe dependencies. AI-powered security review of Rust dependency updates in pull requests.'
+branding:
+  icon: 'shield'
+  color: 'green'
+
+inputs:
+  anthropic-api-key:
+    description: 'Anthropic API key for Claude'
+    required: false
+  openai-api-key:
+    description: 'OpenAI API key (alternative to Claude)'
+    required: false
+  model:
+    description: 'Model to use'
+    required: false
+    default: 'claude-sonnet-4-20250514'
+  cargo-deny:
+    description: 'Run cargo deny check'
+    required: false
+    default: 'true'
+  cargo-audit:
+    description: 'Run cargo audit'
+    required: false
+    default: 'true'
+  cargo-vet:
+    description: 'Run cargo vet (check audit status + generate diffs)'
+    required: false
+    default: 'true'
+  cargo-geiger:
+    description: 'Run cargo geiger on changed crates'
+    required: false
+    default: 'true'
+  max-diff-size:
+    description: 'Max diff size per crate in bytes before truncation'
+    required: false
+    default: '50000'
+  comment-mode:
+    description: 'How to post results: "create" (new comment) or "update" (sticky comment)'
+    required: false
+    default: 'update'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Run YEAH supply chain review
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        OPENAI_API_KEY: ${{ inputs.openai-api-key }}
+        INPUT_MODEL: ${{ inputs.model }}
+        INPUT_CARGO_DENY: ${{ inputs.cargo-deny }}
+        INPUT_CARGO_AUDIT: ${{ inputs.cargo-audit }}
+        INPUT_CARGO_VET: ${{ inputs.cargo-vet }}
+        INPUT_CARGO_GEIGER: ${{ inputs.cargo-geiger }}
+        INPUT_MAX_DIFF_SIZE: ${{ inputs.max-diff-size }}
+        INPUT_COMMENT_MODE: ${{ inputs.comment-mode }}
+        GITHUB_TOKEN: ${{ github.token }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+      run: bash ${{ github.action_path }}/src/main.sh

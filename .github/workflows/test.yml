@@ -1,0 +1,41 @@
+name: YEAH action self-test
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  self-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Create sample Cargo.lock
+        run: |
+          cat <<'TOML' > Cargo.toml
+          [package]
+          name = "yeah-action-self-test"
+          version = "0.1.0"
+          edition = "2021"
+
+          [dependencies]
+          serde = "1.0.195"
+          TOML
+          cargo generate-lockfile
+
+      - name: Run YEAH action
+        uses: ./
+        with:
+          cargo-deny: 'false'
+          cargo-audit: 'false'
+          cargo-vet: 'false'
+          cargo-geiger: 'false'
+          comment-mode: 'create'
