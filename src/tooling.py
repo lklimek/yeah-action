@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -65,7 +66,7 @@ def ensure_binstall() -> None:
 
 
 def ensure_tool(check_cmd: str, package: str) -> None:
-    check_args = check_cmd.split()
+    check_args = shlex.split(check_cmd)
     result = subprocess.run(
         check_args,
         stdout=subprocess.DEVNULL,

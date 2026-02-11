@@ -45,7 +45,7 @@ def main() -> int:
     token = os.getenv("GITHUB_TOKEN")
     repo = os.getenv("GITHUB_REPOSITORY")
     if not pr_number or not token or not repo:
-        print("PR_NUMBER, GITHUB_TOKEN, or GITHUB_REPOSITORY not set; skipping comment.")
+        print("PR_NUMBER, GITHUB_TOKEN, or GITHUB_REPOSITORY not set; skipping comment posting.")
         return 0
 
     lines = [HEADER, MARKER, "", "### Dependency changes"]
