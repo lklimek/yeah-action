@@ -55,9 +55,9 @@ runs:
           ~/.cargo/registry
           ~/.cargo/git
           ~/.cargo/binstall
-        key: ${{ runner.os }}-yeah-tools-${{ hashFiles(format('{0}/Cargo.lock', inputs.project-path)) }}
+        key: ${{ runner.os }}-cargo-tools-${{ hashFiles(format('{0}/Cargo.lock', inputs.project-path)) }}
         restore-keys: |
-          ${{ runner.os }}-yeah-tools-
+          ${{ runner.os }}-cargo-tools-
     - name: Run YEAH supply chain review
       shell: bash
       env:
