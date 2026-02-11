@@ -18,7 +18,7 @@ if [ ! -d "$PROJECT_PATH" ]; then
   exit 1
 fi
 
-export YEAH_PROJECT_PATH="$PROJECT_RELATIVE_PATH"
+export YEAH_PROJECT_RELATIVE_PATH="$PROJECT_RELATIVE_PATH"
 pushd "$PROJECT_PATH" >/dev/null
 
 echo "::group::🦀 YEAH — Detecting dependency changes"
