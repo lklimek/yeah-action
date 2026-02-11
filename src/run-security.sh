@@ -2,35 +2,9 @@
 set -euo pipefail
 
 RESULTS_DIR="$1"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-ensure_binstall() {
-  if cargo binstall --version >/dev/null 2>&1; then
-    return
-  fi
-
-  if command -v curl >/dev/null 2>&1; then
-    curl -sSfL https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash || true
-  fi
-
-  if ! cargo binstall --version >/dev/null 2>&1; then
-    cargo install cargo-binstall --locked
-  fi
-}
-
-ensure_tool() {
-  local check_cmd="$1"
-  local package="$2"
-  if eval "$check_cmd" >/dev/null 2>&1; then
-    return
-  fi
-
-  ensure_binstall
-  if cargo binstall --version >/dev/null 2>&1; then
-    cargo binstall -y "$package" || cargo install "$package" --locked
-  else
-    cargo install "$package" --locked
-  fi
-}
+source "$SCRIPT_DIR/tooling.sh"
 
 if [ "${INPUT_CARGO_AUDIT:-true}" = "true" ]; then
   echo "Running cargo audit..."

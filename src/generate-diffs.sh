@@ -5,6 +5,7 @@ RESULTS_DIR="$1"
 CHANGES_FILE="$RESULTS_DIR/changes.json"
 DIFF_DIR="$RESULTS_DIR/diffs"
 MAX_DIFF_SIZE="${INPUT_MAX_DIFF_SIZE:-50000}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 mkdir -p "$DIFF_DIR"
 
@@ -18,19 +19,7 @@ if [ ! -f "supply-chain/config.toml" ] && [ ! -f "supply-chain/audits.toml" ]; t
   exit 0
 fi
 
-ensure_binstall() {
-  if cargo binstall --version >/dev/null 2>&1; then
-    return
-  fi
-
-  if command -v curl >/dev/null 2>&1; then
-    curl -sSfL https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash || true
-  fi
-
-  if ! cargo binstall --version >/dev/null 2>&1; then
-    cargo install cargo-binstall --locked
-  fi
-}
+source "$SCRIPT_DIR/tooling.sh"
 
 if ! cargo vet --version >/dev/null 2>&1; then
   ensure_binstall
