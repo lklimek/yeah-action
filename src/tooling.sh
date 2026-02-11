@@ -7,27 +7,26 @@ ensure_binstall() {
   fi
 
   curl_available=false
-  curl_failed=false
+  curl_success=false
   if command -v curl >/dev/null 2>&1; then
     curl_available=true
-    temp_script="$(mktemp)"
-    if curl -L --proto '=https' --tlsv1.2 -sSf \
-      https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh \
-      -o "$temp_script"; then
-      if ! bash "$temp_script"; then
-        curl_failed=true
+    if temp_script="$(mktemp)"; then
+      if curl -L --proto '=https' --tlsv1.2 -sSf \
+        https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh \
+        -o "$temp_script"; then
+        if bash "$temp_script"; then
+          curl_success=true
+        fi
       fi
-    else
-      curl_failed=true
+      rm -f "$temp_script"
     fi
-    rm -f "$temp_script"
   fi
 
   if ! command -v cargo-binstall >/dev/null 2>&1; then
-    if [ "$curl_available" = true ] && [ "$curl_failed" = true ]; then
-      echo "cargo-binstall installer failed; using cargo install fallback." >&2
+    if [ "$curl_available" = true ] && [ "$curl_success" = true ]; then
+      echo "cargo-binstall not found after installer; using cargo install fallback." >&2
     elif [ "$curl_available" = true ]; then
-      echo "cargo-binstall not found after curl install; using cargo install fallback." >&2
+      echo "cargo-binstall installer failed; using cargo install fallback." >&2
     else
       echo "curl not available; using cargo install fallback." >&2
     fi

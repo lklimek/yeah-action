@@ -43,9 +43,9 @@ fi
     echo "<details>"
     echo "<summary>View cargo audit output</summary>"
     echo
-    echo "```json"
+    printf '%s\n' '```json'
     cat "$RESULTS_DIR/audit.json"
-    echo "```"
+    printf '%s\n' '```'
     echo "</details>"
   else
     echo "Not run."
@@ -57,9 +57,9 @@ fi
     echo "<details>"
     echo "<summary>View cargo deny output</summary>"
     echo
-    echo "```text"
+    printf '%s\n' '```text'
     cat "$RESULTS_DIR/deny.txt"
-    echo "```"
+    printf '%s\n' '```'
     echo "</details>"
   else
     echo "Not run."
@@ -71,9 +71,9 @@ fi
     echo "<details>"
     echo "<summary>View cargo vet output</summary>"
     echo
-    echo "```json"
+    printf '%s\n' '```json'
     cat "$RESULTS_DIR/vet.json"
-    echo "```"
+    printf '%s\n' '```'
     echo "</details>"
   else
     echo "Not run."
@@ -85,9 +85,9 @@ fi
     echo "<details>"
     echo "<summary>View cargo geiger output</summary>"
     echo
-    echo "```json"
+    printf '%s\n' '```json'
     cat "$RESULTS_DIR/geiger.json"
-    echo "```"
+    printf '%s\n' '```'
     echo "</details>"
   else
     echo "Not run."
