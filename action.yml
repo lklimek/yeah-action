@@ -47,6 +47,17 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    - name: Cache cargo tools
+      uses: actions/cache@v4.0.2
+      with:
+        path: |
+          ~/.cargo/bin
+          ~/.cargo/registry
+          ~/.cargo/git
+          ~/.cargo/binstall
+        key: ${{ runner.os }}-yeah-tools-${{ hashFiles(format('{0}/Cargo.lock', inputs.project-path)) }}
+        restore-keys: |
+          ${{ runner.os }}-yeah-tools-
     - name: Run YEAH supply chain review
       shell: bash
       env:

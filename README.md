@@ -84,6 +84,10 @@ The comment contains:
 - **cargo vet:** Run `cargo vet init` to generate `supply-chain/config.toml` and `supply-chain/audits.toml`.
 - **cargo geiger:** No additional configuration required.
 
+## Caching
+
+YEAH uses `actions/cache` to cache Cargo tool binaries and registries (`~/.cargo/*`) so `cargo-binstall` and the security tools start faster on subsequent runs.
+
 ## License
 
 MIT
