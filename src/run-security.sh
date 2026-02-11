@@ -3,34 +3,55 @@ set -euo pipefail
 
 RESULTS_DIR="$1"
 
+ensure_binstall() {
+  if cargo binstall --version >/dev/null 2>&1; then
+    return
+  fi
+
+  if command -v curl >/dev/null 2>&1; then
+    curl -sSfL https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash || true
+  fi
+
+  if ! cargo binstall --version >/dev/null 2>&1; then
+    cargo install cargo-binstall --locked
+  fi
+}
+
 ensure_tool() {
   local check_cmd="$1"
-  local install_cmd="$2"
-  if ! eval "$check_cmd" >/dev/null 2>&1; then
-    eval "$install_cmd"
+  local package="$2"
+  if eval "$check_cmd" >/dev/null 2>&1; then
+    return
+  fi
+
+  ensure_binstall
+  if cargo binstall --version >/dev/null 2>&1; then
+    cargo binstall -y "$package" || cargo install "$package" --locked
+  else
+    cargo install "$package" --locked
   fi
 }
 
 if [ "${INPUT_CARGO_AUDIT:-true}" = "true" ]; then
   echo "Running cargo audit..."
-  ensure_tool "cargo audit --version" "cargo install cargo-audit --locked"
+  ensure_tool "cargo audit --version" "cargo-audit"
   cargo audit --json > "$RESULTS_DIR/audit.json" 2>&1 || true
 fi
 
 if [ "${INPUT_CARGO_DENY:-true}" = "true" ]; then
   echo "Running cargo deny..."
-  ensure_tool "cargo deny --version" "cargo install cargo-deny --locked"
+  ensure_tool "cargo deny --version" "cargo-deny"
   cargo deny check 2>&1 | tee "$RESULTS_DIR/deny.txt" || true
 fi
 
 if [ "${INPUT_CARGO_VET:-true}" = "true" ]; then
   echo "Running cargo vet..."
-  ensure_tool "cargo vet --version" "cargo install cargo-vet --locked"
+  ensure_tool "cargo vet --version" "cargo-vet"
   cargo vet --output-format=json > "$RESULTS_DIR/vet.json" 2>&1 || true
 fi
 
 if [ "${INPUT_CARGO_GEIGER:-true}" = "true" ]; then
   echo "Running cargo geiger..."
-  ensure_tool "cargo geiger --version" "cargo install cargo-geiger --locked"
+  ensure_tool "cargo geiger --version" "cargo-geiger"
   cargo geiger --output-format json --quiet > "$RESULTS_DIR/geiger.json" 2>&1 || true
 fi

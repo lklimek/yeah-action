@@ -18,8 +18,27 @@ if [ ! -f "supply-chain/config.toml" ] && [ ! -f "supply-chain/audits.toml" ]; t
   exit 0
 fi
 
+ensure_binstall() {
+  if cargo binstall --version >/dev/null 2>&1; then
+    return
+  fi
+
+  if command -v curl >/dev/null 2>&1; then
+    curl -sSfL https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash || true
+  fi
+
+  if ! cargo binstall --version >/dev/null 2>&1; then
+    cargo install cargo-binstall --locked
+  fi
+}
+
 if ! cargo vet --version >/dev/null 2>&1; then
-  cargo install cargo-vet --locked
+  ensure_binstall
+  if cargo binstall --version >/dev/null 2>&1; then
+    cargo binstall -y cargo-vet || cargo install cargo-vet --locked
+  else
+    cargo install cargo-vet --locked
+  fi
 fi
 
 diffs='[]'
