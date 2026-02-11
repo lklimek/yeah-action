@@ -6,7 +6,14 @@ ensure_binstall() {
     return
   fi
 
-  cargo install cargo-binstall --locked
+  if command -v curl >/dev/null 2>&1; then
+    curl -L --proto '=https' --tlsv1.2 -sSf \
+      https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash || true
+  fi
+
+  if ! cargo binstall --version >/dev/null 2>&1; then
+    cargo install cargo-binstall --locked
+  fi
 }
 
 ensure_tool() {
