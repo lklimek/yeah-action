@@ -24,7 +24,7 @@ ensure_binstall() {
 
   if ! command -v cargo-binstall >/dev/null 2>&1; then
     if [ "$curl_available" = true ] && [ "$curl_success" = true ]; then
-      echo "cargo-binstall not found after installer; using cargo install fallback." >&2
+      echo "cargo-binstall not found after installer (PATH or install issue); using cargo install fallback." >&2
     elif [ "$curl_available" = true ]; then
       echo "cargo-binstall installer failed; using cargo install fallback." >&2
     else

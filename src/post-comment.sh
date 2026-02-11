@@ -6,6 +6,14 @@ MARKER="<!-- yeah-action-review -->"
 HEADER="## 🦀 YEAH — Supply Chain Review"
 COMMENT_FILE="$RESULTS_DIR/comment.md"
 
+code_fence() {
+  printf '%s\n' "```$1"
+}
+
+code_fence_end() {
+  printf '%s\n' '```'
+}
+
 if [ -z "${PR_NUMBER:-}" ] || [ -z "${GITHUB_TOKEN:-}" ]; then
   echo "PR_NUMBER or GITHUB_TOKEN not set; skipping comment posting."
   exit 0
@@ -43,9 +51,9 @@ fi
     echo "<details>"
     echo "<summary>View cargo audit output</summary>"
     echo
-    printf '%s\n' '```json'
+    code_fence json
     cat "$RESULTS_DIR/audit.json"
-    printf '%s\n' '```'
+    code_fence_end
     echo "</details>"
   else
     echo "Not run."
@@ -57,9 +65,9 @@ fi
     echo "<details>"
     echo "<summary>View cargo deny output</summary>"
     echo
-    printf '%s\n' '```text'
+    code_fence text
     cat "$RESULTS_DIR/deny.txt"
-    printf '%s\n' '```'
+    code_fence_end
     echo "</details>"
   else
     echo "Not run."
@@ -71,9 +79,9 @@ fi
     echo "<details>"
     echo "<summary>View cargo vet output</summary>"
     echo
-    printf '%s\n' '```json'
+    code_fence json
     cat "$RESULTS_DIR/vet.json"
-    printf '%s\n' '```'
+    code_fence_end
     echo "</details>"
   else
     echo "Not run."
@@ -85,9 +93,9 @@ fi
     echo "<details>"
     echo "<summary>View cargo geiger output</summary>"
     echo
-    printf '%s\n' '```json'
+    code_fence json
     cat "$RESULTS_DIR/geiger.json"
-    printf '%s\n' '```'
+    code_fence_end
     echo "</details>"
   else
     echo "Not run."
