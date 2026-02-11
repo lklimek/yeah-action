@@ -6,14 +6,20 @@ ensure_binstall() {
     return
   fi
 
+  curl_failed=false
   if command -v curl >/dev/null 2>&1; then
     if ! curl -L --proto '=https' --tlsv1.2 -sSf \
       https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash; then
-      echo "cargo-binstall installer failed; falling back to cargo install." >&2
+      curl_failed=true
     fi
   fi
 
   if ! command -v cargo-binstall >/dev/null 2>&1; then
+    if [ "$curl_failed" = true ]; then
+      echo "cargo-binstall installer failed; using cargo install fallback." >&2
+    else
+      echo "cargo-binstall not found; using cargo install fallback." >&2
+    fi
     cargo install cargo-binstall --locked
   fi
 }

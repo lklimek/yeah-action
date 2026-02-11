@@ -88,6 +88,10 @@ The comment contains:
 
 YEAH uses `actions/cache` to cache Cargo tool binaries and registries (`~/.cargo/*`) so `cargo-binstall` and the security tools start faster on subsequent runs.
 
+## Tool Installation Note
+
+The action installs `cargo-binstall` using the official install script from `cargo-bins/cargo-binstall`. If your organization restricts script downloads, install `cargo-binstall` ahead of time in your workflow.
+
 ## License
 
 MIT
