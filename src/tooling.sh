@@ -2,16 +2,18 @@
 set -euo pipefail
 
 ensure_binstall() {
-  if cargo binstall --version >/dev/null 2>&1; then
+  if command -v cargo-binstall >/dev/null 2>&1; then
     return
   fi
 
   if command -v curl >/dev/null 2>&1; then
-    curl -L --proto '=https' --tlsv1.2 -sSf \
-      https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash || true
+    if ! curl -L --proto '=https' --tlsv1.2 -sSf \
+      https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash; then
+      echo "cargo-binstall installer failed; falling back to cargo install." >&2
+    fi
   fi
 
-  if ! cargo binstall --version >/dev/null 2>&1; then
+  if ! command -v cargo-binstall >/dev/null 2>&1; then
     cargo install cargo-binstall --locked
   fi
 }
