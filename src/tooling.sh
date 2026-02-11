@@ -17,9 +17,9 @@ ensure_tool() {
   fi
 
   ensure_binstall
-  if cargo binstall --version >/dev/null 2>&1; then
-    cargo binstall -y "$package" || cargo install "$package" --locked
-  else
-    cargo install "$package" --locked
+  if cargo binstall -y "$package"; then
+    return
   fi
+
+  cargo install "$package" --locked
 }
