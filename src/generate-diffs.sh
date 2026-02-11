@@ -21,14 +21,7 @@ fi
 
 source "$SCRIPT_DIR/tooling.sh"
 
-if ! cargo vet --version >/dev/null 2>&1; then
-  ensure_binstall
-  if cargo binstall --version >/dev/null 2>&1; then
-    cargo binstall -y cargo-vet || cargo install cargo-vet --locked
-  else
-    cargo install cargo-vet --locked
-  fi
-fi
+ensure_tool "cargo vet --version" "cargo-vet"
 
 diffs='[]'
 
