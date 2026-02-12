@@ -1,0 +1,103 @@
+# Dependency Security Review - GitHub Composite Action
+#
+# Performs a security audit of changed or updated dependencies in a pull request
+# using Claude Code. Detects dependency changes automatically or accepts a
+# specific dependency to review via the `dependency` input.
+
+name: "Dependency Security Review"
+description: "Security audit of changed or updated dependencies using Claude Code"
+
+inputs:
+  anthropic_api_key:
+    description: "Anthropic API key for Claude Code"
+    required: true
+  dependency:
+    description: "Force review of a specific dependency (e.g., github.com/lib/pq 1.10.0..1.11.0). Bypasses auto-detection."
+    required: false
+    default: ""
+  ecosystem:
+    description: "Override ecosystem detection (go or rust). Useful with force-review dependency input when auto-detection may fail."
+    required: false
+    default: ""
+  model:
+    description: "Claude model to use"
+    required: false
+    default: "sonnet"
+  max_turns:
+    description: "Maximum agentic conversation turns"
+    required: false
+    default: "50"
+
+outputs:
+  review:
+    description: "Full markdown review text"
+    value: ${{ steps.review.outputs.review }}
+  dependencies:
+    description: "Dependencies that were reviewed"
+    value: ${{ steps.detect.outputs.dependencies }}
+  ecosystem:
+    description: "Detected ecosystem(s)"
+    value: ${{ steps.detect.outputs.ecosystem }}
+
+runs:
+  using: "composite"
+  steps:
+    # Step 1: Detect which dependencies have changed in the pull request.
+    # If the `dependency` input is provided, auto-detection is bypassed.
+    - name: Detect dependency changes
+      id: detect
+      run: ${{ github.action_path }}/scripts/detect-changes.sh
+      shell: bash
+      env:
+        INPUT_DEPENDENCY: ${{ inputs.dependency }}
+        INPUT_ECOSYSTEM: ${{ inputs.ecosystem }}
+        ACTION_PATH: ${{ github.action_path }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+
+    # Step 2: Prepare the Claude Code environment (install CLI, configure settings).
+    - name: Setup Claude environment
+      id: setup
+      if: steps.detect.outputs.has_changes == 'true'
+      run: ${{ github.action_path }}/scripts/setup-claude.sh
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+
+    # Step 3: Build the review prompt from detected changes and ecosystem context.
+    - name: Generate review prompt
+      id: prompt
+      if: steps.detect.outputs.has_changes == 'true'
+      run: ${{ github.action_path }}/scripts/generate-prompt.sh
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        ECOSYSTEM: ${{ steps.detect.outputs.ecosystem }}
+        DEPENDENCIES: ${{ steps.detect.outputs.dependencies }}
+        INPUT_DEPENDENCY: ${{ inputs.dependency }}
+
+    # Step 4: Execute the Claude Code security review against the generated prompt.
+    - name: Run Claude Code review
+      id: review
+      if: steps.detect.outputs.has_changes == 'true'
+      run: ${{ github.action_path }}/scripts/run-claude.sh
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        CLAUDE_MODEL: ${{ inputs.model }}
+        MAX_TURNS: ${{ inputs.max_turns }}
+        PROMPT_FILE: ${{ steps.prompt.outputs.prompt_file }}
+        ECOSYSTEM: ${{ steps.detect.outputs.ecosystem }}
+
+    # Step 5: Post the review results as a comment on the pull request.
+    - name: Post PR comment
+      id: comment
+      if: steps.detect.outputs.has_changes == 'true'
+      run: ${{ github.action_path }}/scripts/post-comment.sh
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        REVIEW_FILE: ${{ steps.review.outputs.review_file }}
+        ECOSYSTEM: ${{ steps.detect.outputs.ecosystem }}
+        DEPENDENCIES: ${{ steps.detect.outputs.dependencies }}
