@@ -13,13 +13,16 @@ if [[ ! -f "${TEMPLATE}" ]]; then
   exit 1
 fi
 
-# Determine the dependency argument: forced input takes priority over auto-detected
+# Determine the dependency argument: forced input > auto-detected > empty (Claude auto-detects)
 if [[ -n "${INPUT_DEPENDENCY:-}" ]]; then
   ARGUMENT="${INPUT_DEPENDENCY}"
   echo "Using forced dependency input: ${ARGUMENT}"
-else
-  ARGUMENT="${DEPENDENCIES:?DEPENDENCIES must be set when INPUT_DEPENDENCY is empty}"
+elif [[ -n "${DEPENDENCIES:-}" ]]; then
+  ARGUMENT="${DEPENDENCIES}"
   echo "Using auto-detected dependencies: ${ARGUMENT}"
+else
+  ARGUMENT=""
+  echo "No specific dependencies provided; Claude will auto-detect from the diff"
 fi
 
 # Read the template
