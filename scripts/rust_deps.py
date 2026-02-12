@@ -3,7 +3,8 @@
 rust_deps.py
 
 Extracts Rust crate dependency changes between two Git commits by comparing
-Cargo.toml and Cargo.lock files at each commit using TOML parsing.
+Cargo.toml and Cargo.lock files at each commit using TOML parsing and
+GitPython for all repository operations.
 
 Output format (one per line):
     crate@old_version..new_version   (version change)
@@ -11,8 +12,9 @@ Output format (one per line):
     crate                            (version unknown)
 """
 
-import subprocess
 import sys
+
+import git
 
 try:
     import tomllib
@@ -20,26 +22,23 @@ except ImportError:
     import tomli as tomllib
 
 
-def _run_git(*args):
-    """Run a git command and return stdout, or empty string on failure."""
+def _show_file(repo, sha, path):
+    """Return file content at a specific commit, or empty string on failure."""
     try:
-        result = subprocess.run(
-            ["git", *args],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        return result.stdout if result.returncode == 0 else ""
-    except OSError:
+        return repo.git.show(f"{sha}:{path}")
+    except git.GitCommandError:
         return ""
 
 
-def _changed_files(base_sha, head_sha, *patterns):
+def _changed_files(repo, base_sha, head_sha, *patterns):
     """Return list of changed files matching git pathspec patterns."""
-    args = ["diff", "--name-only", f"{base_sha}...{head_sha}", "--"]
-    args.extend(patterns)
-    output = _run_git(*args)
-    return [f for f in output.splitlines() if f.strip()]
+    try:
+        output = repo.git.diff(
+            "--name-only", f"{base_sha}...{head_sha}", "--", *patterns,
+        )
+        return [f for f in output.splitlines() if f.strip()]
+    except git.GitCommandError:
+        return []
 
 
 def _versions_from_toml(content):
@@ -88,10 +87,10 @@ def _versions_from_toml(content):
     return versions
 
 
-def _deps_from_cargo_toml(base_sha, head_sha, cargo_path):
+def _deps_from_cargo_toml(repo, base_sha, head_sha, cargo_path):
     """Compare old/new Cargo.toml and return {crate: (old_ver, new_ver)}."""
-    old_content = _run_git("show", f"{base_sha}:{cargo_path}")
-    new_content = _run_git("show", f"{head_sha}:{cargo_path}")
+    old_content = _show_file(repo, base_sha, cargo_path)
+    new_content = _show_file(repo, head_sha, cargo_path)
 
     old_versions = _versions_from_toml(old_content)
     new_versions = _versions_from_toml(new_content)
@@ -122,10 +121,10 @@ def _parse_lock(content):
     return pkgs
 
 
-def _deps_from_cargo_lock(base_sha, head_sha, lock_path):
+def _deps_from_cargo_lock(repo, base_sha, head_sha, lock_path):
     """Compare old/new Cargo.lock and return {crate: (old_ver, new_ver)}."""
-    old_content = _run_git("show", f"{base_sha}:{lock_path}")
-    new_content = _run_git("show", f"{head_sha}:{lock_path}")
+    old_content = _show_file(repo, base_sha, lock_path)
+    new_content = _show_file(repo, head_sha, lock_path)
 
     old_pkgs = _parse_lock(old_content)
     new_pkgs = _parse_lock(new_content)
@@ -148,21 +147,34 @@ def _format_dep(name, old_ver, new_ver):
     return name
 
 
-def get_rust_deps(base_sha, head_sha):
-    """Return list of Rust dependency change strings between two commits."""
+def get_rust_deps(base_sha, head_sha, repo=None):
+    """Return list of Rust dependency change strings between two commits.
+
+    Parameters
+    ----------
+    base_sha : str
+        Base commit SHA.
+    head_sha : str
+        Head commit SHA.
+    repo : git.Repo, optional
+        GitPython Repo instance. Auto-detected from cwd if not provided.
+    """
+    if repo is None:
+        repo = git.Repo(".", search_parent_directories=True)
+
     toml_files = _changed_files(
-        base_sha, head_sha, "**/Cargo.toml", "Cargo.toml"
+        repo, base_sha, head_sha, "**/Cargo.toml", "Cargo.toml",
     )
     lock_files = _changed_files(
-        base_sha, head_sha, "**/Cargo.lock", "Cargo.lock"
+        repo, base_sha, head_sha, "**/Cargo.lock", "Cargo.lock",
     )
 
     # Cargo.lock first (lower priority), then Cargo.toml overwrites.
     deps = {}
     for path in lock_files:
-        deps.update(_deps_from_cargo_lock(base_sha, head_sha, path))
+        deps.update(_deps_from_cargo_lock(repo, base_sha, head_sha, path))
     for path in toml_files:
-        deps.update(_deps_from_cargo_toml(base_sha, head_sha, path))
+        deps.update(_deps_from_cargo_toml(repo, base_sha, head_sha, path))
 
     return [_format_dep(c, old, new) for c, (old, new) in deps.items()]
 

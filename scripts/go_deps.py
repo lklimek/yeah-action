@@ -4,7 +4,7 @@ go_deps.py
 
 Extracts Go dependency changes between two Git commits by comparing go.mod
 and go.sum files at each commit. Uses structured parsing of both formats
-rather than regex-based diff scraping.
+and GitPython for all repository operations.
 
 Output format (one per line):
     module@old_version..new_version   (version change)
@@ -12,30 +12,28 @@ Output format (one per line):
     module                            (version unknown)
 """
 
-import subprocess
 import sys
 
+import git
 
-def _run_git(*args):
-    """Run a git command and return stdout, or empty string on failure."""
+
+def _show_file(repo, sha, path):
+    """Return file content at a specific commit, or empty string on failure."""
     try:
-        result = subprocess.run(
-            ["git", *args],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        return result.stdout if result.returncode == 0 else ""
-    except OSError:
+        return repo.git.show(f"{sha}:{path}")
+    except git.GitCommandError:
         return ""
 
 
-def _changed_files(base_sha, head_sha, *patterns):
+def _changed_files(repo, base_sha, head_sha, *patterns):
     """Return list of changed files matching git pathspec patterns."""
-    args = ["diff", "--name-only", f"{base_sha}...{head_sha}", "--"]
-    args.extend(patterns)
-    output = _run_git(*args)
-    return [f for f in output.splitlines() if f.strip()]
+    try:
+        output = repo.git.diff(
+            "--name-only", f"{base_sha}...{head_sha}", "--", *patterns,
+        )
+        return [f for f in output.splitlines() if f.strip()]
+    except git.GitCommandError:
+        return []
 
 
 def _parse_gomod(content):
@@ -112,10 +110,10 @@ def _parse_gosum(content):
     return deps
 
 
-def _deps_from_gomod(base_sha, head_sha, gomod_path):
+def _deps_from_gomod(repo, base_sha, head_sha, gomod_path):
     """Compare old/new go.mod and return {module: (old_ver, new_ver)}."""
-    old_content = _run_git("show", f"{base_sha}:{gomod_path}")
-    new_content = _run_git("show", f"{head_sha}:{gomod_path}")
+    old_content = _show_file(repo, base_sha, gomod_path)
+    new_content = _show_file(repo, head_sha, gomod_path)
 
     old_deps = _parse_gomod(old_content)
     new_deps = _parse_gomod(new_content)
@@ -128,13 +126,13 @@ def _deps_from_gomod(base_sha, head_sha, gomod_path):
     return results
 
 
-def _deps_from_gosum(base_sha, head_sha, gosum_path):
+def _deps_from_gosum(repo, base_sha, head_sha, gosum_path):
     """Compare old/new go.sum and return {module: (old_ver, new_ver)}.
 
     Detects transitive dependency changes not listed in go.mod.
     """
-    old_content = _run_git("show", f"{base_sha}:{gosum_path}")
-    new_content = _run_git("show", f"{head_sha}:{gosum_path}")
+    old_content = _show_file(repo, base_sha, gosum_path)
+    new_content = _show_file(repo, head_sha, gosum_path)
 
     old_sums = _parse_gosum(old_content)
     new_sums = _parse_gosum(new_content)
@@ -162,17 +160,30 @@ def _format_dep(name, old_ver, new_ver):
     return name
 
 
-def get_go_deps(base_sha, head_sha):
-    """Return list of Go dependency change strings between two commits."""
-    gomod_files = _changed_files(base_sha, head_sha, "**/go.mod", "go.mod")
-    gosum_files = _changed_files(base_sha, head_sha, "**/go.sum", "go.sum")
+def get_go_deps(base_sha, head_sha, repo=None):
+    """Return list of Go dependency change strings between two commits.
+
+    Parameters
+    ----------
+    base_sha : str
+        Base commit SHA.
+    head_sha : str
+        Head commit SHA.
+    repo : git.Repo, optional
+        GitPython Repo instance. Auto-detected from cwd if not provided.
+    """
+    if repo is None:
+        repo = git.Repo(".", search_parent_directories=True)
+
+    gomod_files = _changed_files(repo, base_sha, head_sha, "**/go.mod", "go.mod")
+    gosum_files = _changed_files(repo, base_sha, head_sha, "**/go.sum", "go.sum")
 
     # go.sum first (lower priority), then go.mod overwrites for direct deps.
     deps = {}
     for path in gosum_files:
-        deps.update(_deps_from_gosum(base_sha, head_sha, path))
+        deps.update(_deps_from_gosum(repo, base_sha, head_sha, path))
     for path in gomod_files:
-        deps.update(_deps_from_gomod(base_sha, head_sha, path))
+        deps.update(_deps_from_gomod(repo, base_sha, head_sha, path))
 
     return [_format_dep(mod, old, new) for mod, (old, new) in deps.items()]
 

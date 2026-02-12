@@ -127,12 +127,12 @@ class Scenario:
     def get_go_deps(self) -> list[str]:
         """Call ``get_go_deps()`` from go_deps.py directly."""
         from go_deps import get_go_deps
-        return get_go_deps(self.base_sha, self.head_sha)
+        return get_go_deps(self.base_sha, self.head_sha, repo=self.repo)
 
     def get_rust_deps(self) -> list[str]:
         """Call ``get_rust_deps()`` from rust_deps.py directly."""
         from rust_deps import get_rust_deps
-        return get_rust_deps(self.base_sha, self.head_sha)
+        return get_rust_deps(self.base_sha, self.head_sha, repo=self.repo)
 
     # -- output parsing -----------------------------------------------------
 
