@@ -28,61 +28,29 @@ fi
 PROMPT_CONTENT=$(cat "${PROMPT_FILE}")
 
 # ---------------------------------------------------------------
-# Build the list of allowed tools
-# ---------------------------------------------------------------
-ALLOWED_TOOLS=(
-  --allowedTools Read
-  --allowedTools Glob
-  --allowedTools Grep
-  --allowedTools WebSearch
-  --allowedTools WebFetch
-  --allowedTools Task
-  --allowedTools "Bash(git diff:*)"
-  --allowedTools "Bash(git log:*)"
-  --allowedTools "Bash(git show:*)"
-  --allowedTools "Bash(git clone:*)"
-  --allowedTools "Bash(git checkout:*)"
-  --allowedTools "Bash(rm -rf /tmp/claude/*)"
-  --allowedTools "Bash(gh api:*)"
-  --allowedTools "Bash(curl:*)"
-  --allowedTools "Bash(ls:*)"
-  --allowedTools "Bash(find:*)"
-  --allowedTools "Bash(mkdir:*)"
-)
-
-# Ecosystem-specific tools
-ECOSYSTEM="${ECOSYSTEM:-}"
-
-if [[ "${ECOSYSTEM}" == *"go"* ]]; then
-  ALLOWED_TOOLS+=(
-    --allowedTools "Bash(go list:*)"
-    --allowedTools "Bash(govulncheck:*)"
-    --allowedTools "Bash(go mod:*)"
-  )
-fi
-
-if [[ "${ECOSYSTEM}" == *"rust"* ]]; then
-  ALLOWED_TOOLS+=(
-    --allowedTools "Bash(cargo audit:*)"
-    --allowedTools "Bash(cargo tree:*)"
-  )
-fi
-
-# ---------------------------------------------------------------
 # Run Claude Code
 # ---------------------------------------------------------------
 echo "Running Claude Code review..."
 
+# Use --dangerously-skip-permissions in CI to avoid hanging on tool
+# approval prompts. The CI runner is already sandboxed and ephemeral.
+# pipefail is already set; capture exit codes from the pipe.
+# Pipe: printf (0) | claude (1) | tee (2)
 set +e
 printf '%s' "${PROMPT_CONTENT}" | claude \
   -p \
   --model "${CLAUDE_MODEL}" \
   --max-turns "${MAX_TURNS}" \
   --output-format text \
-  "${ALLOWED_TOOLS[@]}" \
-  > "${REVIEW_FILE}"
-CLAUDE_EXIT=$?
+  --verbose \
+  --dangerously-skip-permissions \
+  | tee "${REVIEW_FILE}"
+PIPE_STATUSES=("${PIPESTATUS[@]}")
 set -e
+
+CLAUDE_EXIT="${PIPE_STATUSES[1]}"
+echo ""
+echo "Claude Code exited with status ${CLAUDE_EXIT}"
 
 # ---------------------------------------------------------------
 # Handle failure or empty output
