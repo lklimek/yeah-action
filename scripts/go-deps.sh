@@ -18,11 +18,34 @@ extract_go_deps() {
   local base_sha="${1:?Missing base_sha argument}"
   local head_sha="${2:?Missing head_sha argument}"
 
-  # Get the diff of go.mod between the two commits.
+  # Find all changed go.mod files (root and subdirectories).
+  local changed_gomod_files
+  changed_gomod_files="$(git diff --name-only "${base_sha}...${head_sha}" -- '**/go.mod' 'go.mod' 2>/dev/null || true)"
+
+  if [[ -z "${changed_gomod_files}" ]]; then
+    return 0
+  fi
+
+  # Process each changed go.mod file.
+  while IFS= read -r gomod_file; do
+    [[ -z "${gomod_file}" ]] && continue
+    _extract_go_deps_from_file "${base_sha}" "${head_sha}" "${gomod_file}"
+  done <<< "${changed_gomod_files}"
+}
+
+# _extract_go_deps_from_file BASE_SHA HEAD_SHA GOMOD_PATH
+#
+# Internal helper: extracts changed dependencies from a single go.mod file.
+_extract_go_deps_from_file() {
+  local base_sha="${1}"
+  local head_sha="${2}"
+  local gomod_file="${3}"
+
+  # Get the diff of this specific go.mod between the two commits.
   # The three-dot diff shows changes introduced on the head branch since it
   # diverged from the base branch.
   local diff_output
-  diff_output="$(git diff "${base_sha}...${head_sha}" -- go.mod 2>/dev/null || true)"
+  diff_output="$(git diff "${base_sha}...${head_sha}" -- "${gomod_file}" 2>/dev/null || true)"
 
   # If there is no diff (go.mod unchanged or does not exist), return nothing.
   if [[ -z "${diff_output}" ]]; then
@@ -61,7 +84,7 @@ extract_go_deps() {
     # Try to read the base SHA's go.mod to find the old version of this module.
     local old_version=""
     local base_gomod
-    base_gomod="$(git show "${base_sha}:go.mod" 2>/dev/null || true)"
+    base_gomod="$(git show "${base_sha}:${gomod_file}" 2>/dev/null || true)"
 
     if [[ -n "${base_gomod}" ]]; then
       # Search for the module in the old go.mod. The line format is:

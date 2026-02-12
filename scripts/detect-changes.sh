@@ -63,10 +63,30 @@ fi
 # ---------------------------------------------------------------------------
 echo "Auto-detection mode: scanning PR diff for dependency changes"
 
-# Validate that required environment variables are set.
-: "${BASE_SHA:?BASE_SHA environment variable is required}"
-: "${HEAD_SHA:?HEAD_SHA environment variable is required}"
+# Validate that ACTION_PATH is set.
 : "${ACTION_PATH:?ACTION_PATH environment variable is required}"
+
+# Determine BASE_SHA and HEAD_SHA, with fallbacks for non-PR contexts
+# (e.g., workflow_dispatch, push events).
+if [[ -z "${BASE_SHA:-}" ]]; then
+  # Try to find the merge base with the default branch.
+  default_branch="$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")"
+  BASE_SHA="$(git merge-base "origin/${default_branch}" HEAD 2>/dev/null || git rev-parse HEAD~1 2>/dev/null || true)"
+  if [[ -z "${BASE_SHA}" ]]; then
+    echo "Error: Could not determine BASE_SHA. Provide it explicitly or ensure a remote default branch exists." >&2
+    exit 1
+  fi
+  echo "BASE_SHA not provided; using fallback: ${BASE_SHA}"
+fi
+
+if [[ -z "${HEAD_SHA:-}" ]]; then
+  HEAD_SHA="$(git rev-parse HEAD 2>/dev/null || true)"
+  if [[ -z "${HEAD_SHA}" ]]; then
+    echo "Error: Could not determine HEAD_SHA." >&2
+    exit 1
+  fi
+  echo "HEAD_SHA not provided; using fallback: ${HEAD_SHA}"
+fi
 
 # Get the list of files changed in the PR.
 changed_files="$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}" 2>/dev/null || true)"

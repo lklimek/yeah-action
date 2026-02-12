@@ -22,9 +22,32 @@ extract_rust_deps() {
   local base_sha="${1:?Missing base_sha argument}"
   local head_sha="${2:?Missing head_sha argument}"
 
-  # Get the diff of Cargo.toml between the two commits.
+  # Find all changed Cargo.toml files (root and subdirectories).
+  local changed_cargo_files
+  changed_cargo_files="$(git diff --name-only "${base_sha}...${head_sha}" -- '**/Cargo.toml' 'Cargo.toml' 2>/dev/null || true)"
+
+  if [[ -z "${changed_cargo_files}" ]]; then
+    return 0
+  fi
+
+  # Process each changed Cargo.toml file.
+  while IFS= read -r cargo_file; do
+    [[ -z "${cargo_file}" ]] && continue
+    _extract_rust_deps_from_file "${base_sha}" "${head_sha}" "${cargo_file}"
+  done <<< "${changed_cargo_files}"
+}
+
+# _extract_rust_deps_from_file BASE_SHA HEAD_SHA CARGO_TOML_PATH
+#
+# Internal helper: extracts changed dependencies from a single Cargo.toml file.
+_extract_rust_deps_from_file() {
+  local base_sha="${1}"
+  local head_sha="${2}"
+  local cargo_file="${3}"
+
+  # Get the diff of this specific Cargo.toml between the two commits.
   local diff_output
-  diff_output="$(git diff "${base_sha}...${head_sha}" -- Cargo.toml 2>/dev/null || true)"
+  diff_output="$(git diff "${base_sha}...${head_sha}" -- "${cargo_file}" 2>/dev/null || true)"
 
   # If there is no diff, return nothing.
   if [[ -z "${diff_output}" ]]; then
@@ -123,9 +146,9 @@ extract_rust_deps() {
     fi
   done <<< "${diff_output}"
 
-  # Read the base Cargo.toml once for old version lookups.
+  # Read the base version of this Cargo.toml for old version lookups.
   local base_cargo
-  base_cargo="$(git show "${base_sha}:Cargo.toml" 2>/dev/null || true)"
+  base_cargo="$(git show "${base_sha}:${cargo_file}" 2>/dev/null || true)"
 
   # For each changed crate, try to find the old version from the base SHA's
   # Cargo.toml to produce "crate@old..new" output.
