@@ -81,7 +81,13 @@ runs:
         DEPENDENCIES: ${{ steps.detect.outputs.dependencies }}
         INPUT_DEPENDENCY: ${{ inputs.dependency }}
 
-    # Step 4: Execute the Claude Code security review via the Python SDK.
+    # Step 4: Install the Claude Code CLI (required by claude-code-sdk).
+    - name: Install Claude Code CLI
+      if: steps.detect.outputs.has_changes == 'true'
+      run: npm install -g @anthropic-ai/claude-code
+      shell: bash
+
+    # Step 5: Execute the Claude Code security review via the Python SDK.
     - name: Run Claude Code review
       id: review
       if: steps.detect.outputs.has_changes == 'true'
@@ -94,7 +100,7 @@ runs:
         PROMPT_FILE: ${{ steps.prompt.outputs.prompt_file }}
         ECOSYSTEM: ${{ steps.detect.outputs.ecosystem }}
 
-    # Step 5: Post the review results as a comment on the pull request.
+    # Step 6: Post the review results as a comment on the pull request.
     - name: Post PR comment
       id: comment
       if: steps.detect.outputs.has_changes == 'true'
