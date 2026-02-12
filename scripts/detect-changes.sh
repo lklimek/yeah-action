@@ -133,10 +133,7 @@ rust_deps=""
 
 if [[ "${has_go}" == "true" ]]; then
   echo "Extracting Go dependency changes..."
-  # Source the Go dependency extraction function.
-  # shellcheck source=go-deps.sh
-  source "${ACTION_PATH}/scripts/go-deps.sh"
-  go_deps="$(extract_go_deps "${BASE_SHA}" "${HEAD_SHA}" || true)"
+  go_deps="$(python3 "${ACTION_PATH}/scripts/go_deps.py" "${BASE_SHA}" "${HEAD_SHA}" || true)"
   if [[ -n "${go_deps}" ]]; then
     echo "Go dependencies changed:"
     echo "${go_deps}"
@@ -147,10 +144,8 @@ fi
 
 if [[ "${has_rust}" == "true" ]]; then
   echo "Extracting Rust dependency changes..."
-  # Source the Rust dependency extraction function.
-  # shellcheck source=rust-deps.sh
-  source "${ACTION_PATH}/scripts/rust-deps.sh"
-  rust_deps="$(extract_rust_deps "${BASE_SHA}" "${HEAD_SHA}" || true)"
+  pip install -q -r "${ACTION_PATH}/requirements.txt" 2>/dev/null || true
+  rust_deps="$(python3 "${ACTION_PATH}/scripts/rust_deps.py" "${BASE_SHA}" "${HEAD_SHA}" || true)"
   if [[ -n "${rust_deps}" ]]; then
     echo "Rust dependencies changed:"
     echo "${rust_deps}"
