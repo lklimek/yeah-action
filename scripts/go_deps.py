@@ -132,8 +132,17 @@ def _deps_from_gosum(base_sha, head_sha, gosum_path):
     return results
 
 
-def extract_go_deps(base_sha, head_sha):
-    """Print Go dependency changes between two commits."""
+def _format_dep(name, old_ver, new_ver):
+    """Format a single dependency change as a string."""
+    if old_ver and new_ver and old_ver != new_ver:
+        return f"{name}@{old_ver}..{new_ver}"
+    elif new_ver:
+        return f"{name}@{new_ver}"
+    return name
+
+
+def get_go_deps(base_sha, head_sha):
+    """Return list of Go dependency change strings between two commits."""
     gomod_files = _changed_files(base_sha, head_sha, "**/go.mod", "go.mod")
     gosum_files = _changed_files(base_sha, head_sha, "**/go.sum", "go.sum")
 
@@ -144,17 +153,12 @@ def extract_go_deps(base_sha, head_sha):
     for path in gomod_files:
         deps.update(_deps_from_gomod(base_sha, head_sha, path))
 
-    for mod, (old_ver, new_ver) in deps.items():
-        if old_ver and new_ver and old_ver != new_ver:
-            print(f"{mod}@{old_ver}..{new_ver}")
-        elif new_ver:
-            print(f"{mod}@{new_ver}")
-        else:
-            print(mod)
+    return [_format_dep(mod, old, new) for mod, (old, new) in deps.items()]
 
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print(f"Usage: {sys.argv[0]} BASE_SHA HEAD_SHA", file=sys.stderr)
         sys.exit(1)
-    extract_go_deps(sys.argv[1], sys.argv[2])
+    for line in get_go_deps(sys.argv[1], sys.argv[2]):
+        print(line)

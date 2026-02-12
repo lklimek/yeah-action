@@ -198,8 +198,17 @@ def _deps_from_cargo_lock(base_sha, head_sha, lock_path):
     return results
 
 
-def extract_rust_deps(base_sha, head_sha):
-    """Print Rust dependency changes between two commits."""
+def _format_dep(name, old_ver, new_ver):
+    """Format a single dependency change as a string."""
+    if old_ver and new_ver and old_ver != new_ver:
+        return f"{name}@{old_ver}..{new_ver}"
+    elif new_ver:
+        return f"{name}@{new_ver}"
+    return name
+
+
+def get_rust_deps(base_sha, head_sha):
+    """Return list of Rust dependency change strings between two commits."""
     toml_files = _changed_files(
         base_sha, head_sha, "**/Cargo.toml", "Cargo.toml"
     )
@@ -214,17 +223,12 @@ def extract_rust_deps(base_sha, head_sha):
     for path in toml_files:
         deps.update(_deps_from_cargo_toml(base_sha, head_sha, path))
 
-    for crate, (old_ver, new_ver) in deps.items():
-        if old_ver and new_ver and old_ver != new_ver:
-            print(f"{crate}@{old_ver}..{new_ver}")
-        elif new_ver:
-            print(f"{crate}@{new_ver}")
-        else:
-            print(crate)
+    return [_format_dep(c, old, new) for c, (old, new) in deps.items()]
 
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print(f"Usage: {sys.argv[0]} BASE_SHA HEAD_SHA", file=sys.stderr)
         sys.exit(1)
-    extract_rust_deps(sys.argv[1], sys.argv[2])
+    for line in get_rust_deps(sys.argv[1], sys.argv[2]):
+        print(line)
