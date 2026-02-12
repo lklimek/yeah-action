@@ -29,10 +29,10 @@ fi
 TEMPLATE_CONTENT=$(cat "${TEMPLATE}")
 
 # Replace the literal string $ARGUMENTS with the dependency info.
-# Use | as the sed delimiter to avoid conflicts with common path characters.
-# Escape sed special characters in the replacement string.
-ESCAPED_ARGUMENT=$(printf '%s\n' "${ARGUMENT}" | sed 's/[&/\]/\\&/g')
-PROMPT_CONTENT=$(printf '%s\n' "${TEMPLATE_CONTENT}" | sed "s|\\\$ARGUMENTS|${ESCAPED_ARGUMENT}|g")
+# Use % as the sed delimiter to avoid conflicts with / in paths and & in URLs.
+# Escape sed special characters (\, &, %) in the replacement string.
+ESCAPED_ARGUMENT=$(printf '%s\n' "${ARGUMENT}" | sed 's/[\\&%]/\\&/g')
+PROMPT_CONTENT=$(printf '%s\n' "${TEMPLATE_CONTENT}" | sed "s%\\\$ARGUMENTS%${ESCAPED_ARGUMENT}%g")
 
 # Write to a temp file
 PROMPT_FILE="/tmp/yeah-action-prompt-$$.md"
