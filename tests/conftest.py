@@ -1,18 +1,22 @@
 """Shared fixtures for dependency-detection scenario tests.
 
 Uses GitPython for all git operations and pytest for test orchestration.
+Each test gets an isolated temporary git repository seeded with the
+initial test-projects/ content, so tests never touch the real repo.
 """
 
 import os
+import shutil
 import sys
-import tempfile
 from pathlib import Path
 
 import git
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-SCRIPTS_DIR = REPO_ROOT / "scripts"
+# Location of the real action root (for scripts and initial test data).
+ACTION_ROOT = Path(__file__).resolve().parent.parent
+SCRIPTS_DIR = ACTION_ROOT / "scripts"
+TEST_PROJECTS_SRC = ACTION_ROOT / "test-projects"
 
 # Ensure the scripts directory is importable.
 if str(SCRIPTS_DIR) not in sys.path:
@@ -20,34 +24,31 @@ if str(SCRIPTS_DIR) not in sys.path:
 
 
 class Scenario:
-    """Helper that manages a throwaway git branch for a single test."""
+    """Helper that manages an isolated temporary git repo for a single test."""
 
-    def __init__(self, repo: git.Repo, branch_name: str, output_file: Path):
+    def __init__(self, repo: git.Repo, repo_dir: Path, output_file: Path):
         self.repo = repo
-        self.branch_name = branch_name
+        self.repo_dir = repo_dir
         self.output_file = output_file
 
     # -- git helpers (via GitPython) ----------------------------------------
 
     def write_file(self, relpath: str, content: str) -> Path:
-        """Write *content* to *relpath* (relative to repo root)."""
-        full = REPO_ROOT / relpath
+        """Write *content* to *relpath* (relative to temp repo root)."""
+        full = self.repo_dir / relpath
         full.parent.mkdir(parents=True, exist_ok=True)
         full.write_text(content)
         return full
 
     def append_file(self, relpath: str, content: str) -> Path:
         """Append *content* to an existing file at *relpath*."""
-        full = REPO_ROOT / relpath
+        full = self.repo_dir / relpath
         with full.open("a") as fh:
             fh.write(content)
         return full
 
     def commit(self, message: str = "test commit") -> git.Commit:
         """Stage everything under ``test-projects/`` and commit."""
-        # Use repo.index to add only test-projects/ changes.
-        # We need to collect actual changed/new files under test-projects/.
-        test_dir = str(REPO_ROOT / "test-projects")
         changed = [
             item.a_path
             for item in self.repo.index.diff(None)
@@ -81,7 +82,7 @@ class Scenario:
         env = {
             **os.environ,
             "GITHUB_OUTPUT": str(self.output_file),
-            "ACTION_PATH": str(REPO_ROOT),
+            "ACTION_PATH": str(ACTION_ROOT),
             "BASE_SHA": self.base_sha,
             "HEAD_SHA": self.head_sha,
         }
@@ -91,6 +92,7 @@ class Scenario:
         subprocess.run(
             [sys.executable, str(SCRIPTS_DIR / "detect_changes.py")],
             env=env,
+            cwd=str(self.repo_dir),
             check=True,
         )
         return self._parse_output()
@@ -104,7 +106,7 @@ class Scenario:
         env = {
             **os.environ,
             "GITHUB_OUTPUT": str(self.output_file),
-            "ACTION_PATH": str(REPO_ROOT),
+            "ACTION_PATH": str(ACTION_ROOT),
             "INPUT_DEPENDENCY": dependency,
         }
         if ecosystem:
@@ -120,6 +122,7 @@ class Scenario:
         subprocess.run(
             [sys.executable, str(SCRIPTS_DIR / "detect_changes.py")],
             env=env,
+            cwd=str(self.repo_dir),
             check=True,
         )
         return self._parse_output()
@@ -127,12 +130,12 @@ class Scenario:
     def get_go_deps(self) -> list[str]:
         """Call ``get_go_deps()`` from go_deps.py directly."""
         from go_deps import get_go_deps
-        return get_go_deps(self.base_sha, self.head_sha)
+        return get_go_deps(self.base_sha, self.head_sha, repo=self.repo)
 
     def get_rust_deps(self) -> list[str]:
         """Call ``get_rust_deps()`` from rust_deps.py directly."""
         from rust_deps import get_rust_deps
-        return get_rust_deps(self.base_sha, self.head_sha)
+        return get_rust_deps(self.base_sha, self.head_sha, repo=self.repo)
 
     # -- output parsing -----------------------------------------------------
 
@@ -146,25 +149,33 @@ class Scenario:
 
 
 @pytest.fixture()
-def scenario(request, tmp_path):
-    """Yield a :class:`Scenario` with a temporary git branch.
+def scenario(tmp_path):
+    """Yield a :class:`Scenario` backed by a fresh temporary git repository.
 
-    On teardown the original branch is restored and the test branch deleted.
+    The temp repo is seeded with the initial test-projects/ content and an
+    initial commit, so tests can modify files and create new commits on top.
     """
-    repo = git.Repo(str(REPO_ROOT))
-    original_branch = repo.active_branch
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
 
-    branch_name = f"test/{request.node.name}-{os.getpid()}"
-    test_branch = repo.create_head(branch_name)
-    test_branch.checkout()
+    # Initialise a new git repo.
+    repo = git.Repo.init(str(repo_dir))
+    repo.config_writer().set_value("user", "name", "Test").release()
+    repo.config_writer().set_value("user", "email", "test@test.com").release()
+
+    # Seed with initial test-projects/ content.
+    dest = repo_dir / "test-projects"
+    shutil.copytree(str(TEST_PROJECTS_SRC), str(dest))
+
+    # Create the initial commit.
+    repo.index.add([
+        str(p.relative_to(repo_dir))
+        for p in dest.rglob("*")
+        if p.is_file()
+    ])
+    repo.index.commit("initial test-projects content")
 
     output_file = tmp_path / "github_output"
     output_file.touch()
 
-    ctx = Scenario(repo, branch_name, output_file)
-
-    yield ctx
-
-    # Teardown: restore original branch, delete test branch.
-    original_branch.checkout(force=True)
-    repo.delete_head(branch_name, force=True)
+    yield Scenario(repo, repo_dir, output_file)

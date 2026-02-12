@@ -3,34 +3,25 @@
 post_comment.py
 
 Posts or updates a sticky PR comment with the dependency security review.
+Uses PyGithub for all GitHub API interactions.
 Falls back to GITHUB_STEP_SUMMARY when no PR context is available.
 """
 
-import json
 import os
-import subprocess
 import sys
-import tempfile
 
+from github import Auth, Github
 
-def _gh_api(*args):
-    """Run a gh api command and return (stdout, returncode)."""
-    result = subprocess.run(
-        ["gh", "api", *args],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return result.stdout.strip(), result.returncode
+_MARKER = "<!-- yeah-action-dependency-review -->"
 
 
 def main():
-    # Validate required environment variables.
     for var in ("GH_TOKEN", "REVIEW_FILE"):
         if not os.environ.get(var):
             print(f"Error: {var} must be set", file=sys.stderr)
             sys.exit(1)
 
+    token = os.environ["GH_TOKEN"]
     review_file = os.environ["REVIEW_FILE"]
     ecosystem = os.environ.get("ECOSYSTEM", "unknown")
     dependencies = os.environ.get("DEPENDENCIES", "none")
@@ -44,7 +35,6 @@ def main():
         print("Error: GITHUB_REPOSITORY must be set", file=sys.stderr)
         sys.exit(1)
 
-    # Read review content.
     if not os.path.isfile(review_file):
         print(f"Error: Review file not found at {review_file}",
               file=sys.stderr)
@@ -53,10 +43,8 @@ def main():
     with open(review_file) as f:
         review_content = f.read()
 
-    # Build the comment body.
-    marker = "<!-- yeah-action-dependency-review -->"
     comment_body = (
-        f"{marker}\n"
+        f"{_MARKER}\n"
         f"## Dependency Security Review\n\n"
         f"| Field | Value |\n"
         f"|-------|-------|\n"
@@ -69,14 +57,12 @@ def main():
         f"dependency security review</sub>"
     )
 
-    # Truncate if needed (GitHub limit: 65535 chars).
     max_length = 65000
     if len(comment_body) > max_length:
         print(f"Warning: Comment body exceeds {max_length} characters; "
               "truncating.")
         comment_body = comment_body[:max_length] + "\n\n... (truncated)"
 
-    # If there is no PR, write to step summary instead.
     if pr_number == "0":
         print("No pull request context detected. Writing to step summary.")
         with open(step_summary, "a") as f:
@@ -85,43 +71,27 @@ def main():
         print("Review written to GITHUB_STEP_SUMMARY.")
         return
 
-    # Search for an existing comment with the marker.
+    g = Github(auth=Auth.Token(token))
+    repo = g.get_repo(github_repo)
+    pr = repo.get_pull(int(pr_number))
+
     print(f"Searching for existing review comment on PR #{pr_number}...")
-    out, _ = _gh_api(
-        f"repos/{github_repo}/issues/{pr_number}/comments",
-        "--paginate",
-        "--jq",
-        '.[] | select(.body | contains("<!-- yeah-action-dependency-review -->")) | .id',
-    )
-    existing_id = out.splitlines()[0] if out.strip() else ""
+    existing_comment = None
+    for comment in pr.get_issue_comments():
+        if _MARKER in comment.body:
+            existing_comment = comment
+            break
 
-    # Prepare the JSON payload.
-    fd, payload_file = tempfile.mkstemp(
-        prefix="yeah-action-payload-", suffix=".json"
-    )
-    with os.fdopen(fd, "w") as f:
-        json.dump({"body": comment_body}, f)
+    if existing_comment:
+        print(f"Updating existing comment (ID: {existing_comment.id})...")
+        existing_comment.edit(comment_body)
+        print("Comment updated.")
+    else:
+        print(f"Creating new comment on PR #{pr_number}...")
+        pr.create_issue_comment(comment_body)
+        print("Comment created.")
 
-    try:
-        if existing_id:
-            print(f"Updating existing comment (ID: {existing_id})...")
-            _gh_api(
-                "--method", "PATCH",
-                f"repos/{github_repo}/issues/comments/{existing_id}",
-                "--input", payload_file,
-            )
-            print("Comment updated.")
-        else:
-            print(f"Creating new comment on PR #{pr_number}...")
-            _gh_api(
-                "--method", "POST",
-                f"repos/{github_repo}/issues/{pr_number}/comments",
-                "--input", payload_file,
-            )
-            print("Comment created.")
-    finally:
-        os.unlink(payload_file)
-
+    g.close()
     print("PR comment posted successfully.")
 
 

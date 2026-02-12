@@ -42,6 +42,11 @@ outputs:
 runs:
   using: "composite"
   steps:
+    # Step 0: Install Python dependencies (GitPython, PyGithub, etc.).
+    - name: Install Python dependencies
+      run: pip install -r ${{ github.action_path }}/requirements.txt
+      shell: bash
+
     # Step 1: Detect which dependencies have changed in the pull request.
     # If the `dependency` input is provided, auto-detection is bypassed.
     - name: Detect dependency changes
@@ -55,7 +60,7 @@ runs:
         BASE_SHA: ${{ github.event.pull_request.base.sha }}
         HEAD_SHA: ${{ github.event.pull_request.head.sha }}
 
-    # Step 2: Prepare the Claude Code environment (install CLI, configure settings).
+    # Step 2: Prepare the Claude Code environment (copy agent configs).
     - name: Setup Claude environment
       id: setup
       if: steps.detect.outputs.has_changes == 'true'
@@ -76,7 +81,7 @@ runs:
         DEPENDENCIES: ${{ steps.detect.outputs.dependencies }}
         INPUT_DEPENDENCY: ${{ inputs.dependency }}
 
-    # Step 4: Execute the Claude Code security review against the generated prompt.
+    # Step 4: Execute the Claude Code security review via the Python SDK.
     - name: Run Claude Code review
       id: review
       if: steps.detect.outputs.has_changes == 'true'

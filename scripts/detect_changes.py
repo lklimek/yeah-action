@@ -3,7 +3,8 @@
 detect_changes.py
 
 Main dependency change detection script for the Dependency Security Review
-GitHub Action. Operates in two modes:
+GitHub Action. Uses GitPython for all repository operations. Operates in
+two modes:
 
 1. Force mode: When INPUT_DEPENDENCY is set, bypasses auto-detection and
    infers the ecosystem from the dependency name.
@@ -19,23 +20,10 @@ Outputs (written to GITHUB_OUTPUT):
 """
 
 import os
-import subprocess
 import sys
 from pathlib import PurePosixPath
 
-# ---------------------------------------------------------------------------
-# Ensure tomli is available before importing rust_deps (needs TOML parsing).
-# Python 3.11+ has tomllib in stdlib; older versions need the tomli package.
-# ---------------------------------------------------------------------------
-try:
-    import tomllib  # noqa: F401
-except ImportError:
-    try:
-        import tomli  # noqa: F401
-    except ImportError:
-        subprocess.check_call(
-            [sys.executable, "-m", "pip", "install", "-q", "tomli"],
-        )
+import git
 
 # Add scripts directory to path for sibling module imports.
 _SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -52,20 +40,6 @@ def _set_output(key, value):
     if output_file:
         with open(output_file, "a") as f:
             f.write(f"{key}={value}\n")
-
-
-def _run_git(*args):
-    """Run a git command and return stdout, or empty string on failure."""
-    try:
-        result = subprocess.run(
-            ["git", *args],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        return result.stdout if result.returncode == 0 else ""
-    except OSError:
-        return ""
 
 
 def _has_cargo_toml():
@@ -86,8 +60,6 @@ def _force_mode():
     ecosystem = os.environ.get("INPUT_ECOSYSTEM", "")
 
     if not ecosystem:
-        # Infer ecosystem: Go modules start with a domain (contain a dot
-        # before the first slash), e.g. github.com/lib/pq.
         first_slash = dep.find("/")
         if first_slash > 0 and "." in dep[:first_slash]:
             ecosystem = "go"
@@ -113,36 +85,50 @@ def _auto_detect_mode():
               file=sys.stderr)
         sys.exit(1)
 
-    # Determine BASE_SHA and HEAD_SHA with fallbacks.
+    repo = git.Repo(".", search_parent_directories=True)
+
     base_sha = os.environ.get("BASE_SHA", "")
     head_sha = os.environ.get("HEAD_SHA", "")
 
     if not base_sha:
-        ref = _run_git(
-            "symbolic-ref", "refs/remotes/origin/HEAD"
-        ).strip()
-        default_branch = ref.replace("refs/remotes/origin/", "") if ref else "main"
-        base_sha = _run_git(
-            "merge-base", f"origin/{default_branch}", "HEAD"
-        ).strip()
+        try:
+            ref = repo.git.symbolic_ref("refs/remotes/origin/HEAD")
+            default_branch = ref.replace("refs/remotes/origin/", "")
+        except git.GitCommandError:
+            default_branch = "main"
+
+        try:
+            base_sha = repo.git.merge_base(
+                f"origin/{default_branch}", "HEAD",
+            ).strip()
+        except git.GitCommandError:
+            pass
+
         if not base_sha:
-            base_sha = _run_git("rev-parse", "HEAD~1").strip()
+            try:
+                base_sha = repo.git.rev_parse("HEAD~1").strip()
+            except git.GitCommandError:
+                pass
+
         if not base_sha:
             print("Error: Could not determine BASE_SHA.", file=sys.stderr)
             sys.exit(1)
         print(f"BASE_SHA not provided; using fallback: {base_sha}")
 
     if not head_sha:
-        head_sha = _run_git("rev-parse", "HEAD").strip()
-        if not head_sha:
+        try:
+            head_sha = repo.git.rev_parse("HEAD").strip()
+        except git.GitCommandError:
             print("Error: Could not determine HEAD_SHA.", file=sys.stderr)
             sys.exit(1)
         print(f"HEAD_SHA not provided; using fallback: {head_sha}")
 
-    # Get changed files.
-    changed_files = _run_git(
-        "diff", "--name-only", f"{base_sha}...{head_sha}"
-    ).strip()
+    try:
+        changed_files = repo.git.diff(
+            "--name-only", f"{base_sha}...{head_sha}",
+        ).strip()
+    except git.GitCommandError:
+        changed_files = ""
 
     if not changed_files:
         print(f"No changed files detected between {base_sha} and {head_sha}")
@@ -154,7 +140,6 @@ def _auto_detect_mode():
     print("Changed files:")
     print(changed_files)
 
-    # Detect Go and Rust dependency file changes by checking basenames.
     file_list = [f for f in changed_files.splitlines() if f.strip()]
     has_go = any(
         PurePosixPath(f).name in ("go.mod", "go.sum") for f in file_list
@@ -176,14 +161,13 @@ def _auto_detect_mode():
         _set_output("dependencies", "")
         return
 
-    # Extract changed dependencies.
     go_deps = []
     rust_deps = []
 
     if has_go:
         print("Extracting Go dependency changes...")
         try:
-            go_deps = get_go_deps(base_sha, head_sha)
+            go_deps = get_go_deps(base_sha, head_sha, repo=repo)
         except Exception as exc:
             print(f"Warning: Go dependency extraction failed: {exc}")
         if go_deps:
@@ -196,7 +180,7 @@ def _auto_detect_mode():
     if has_rust:
         print("Extracting Rust dependency changes...")
         try:
-            rust_deps = get_rust_deps(base_sha, head_sha)
+            rust_deps = get_rust_deps(base_sha, head_sha, repo=repo)
         except Exception as exc:
             print(f"Warning: Rust dependency extraction failed: {exc}")
         if rust_deps:
@@ -206,7 +190,6 @@ def _auto_detect_mode():
             print("Rust manifest files changed but no individual dependency "
                   "changes detected")
 
-    # Determine ecosystem label.
     if has_go and has_rust:
         ecosystem = "mixed"
     elif has_go:
@@ -214,11 +197,8 @@ def _auto_detect_mode():
     else:
         ecosystem = "rust"
 
-    # Combine into comma-separated list.
     all_deps = go_deps + rust_deps
     dependencies = ",".join(all_deps)
-
-    # Manifest files changed → flag for review even without specific deps.
     has_changes = "true"
 
     print(f"\nSummary:")
