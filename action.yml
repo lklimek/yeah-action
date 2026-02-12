@@ -46,7 +46,7 @@ runs:
     # If the `dependency` input is provided, auto-detection is bypassed.
     - name: Detect dependency changes
       id: detect
-      run: ${{ github.action_path }}/scripts/detect-changes.sh
+      run: python3 ${{ github.action_path }}/scripts/detect_changes.py
       shell: bash
       env:
         INPUT_DEPENDENCY: ${{ inputs.dependency }}
@@ -59,7 +59,7 @@ runs:
     - name: Setup Claude environment
       id: setup
       if: steps.detect.outputs.has_changes == 'true'
-      run: ${{ github.action_path }}/scripts/setup-claude.sh
+      run: python3 ${{ github.action_path }}/scripts/setup_claude.py
       shell: bash
       env:
         ACTION_PATH: ${{ github.action_path }}
@@ -68,7 +68,7 @@ runs:
     - name: Generate review prompt
       id: prompt
       if: steps.detect.outputs.has_changes == 'true'
-      run: ${{ github.action_path }}/scripts/generate-prompt.sh
+      run: python3 ${{ github.action_path }}/scripts/generate_prompt.py
       shell: bash
       env:
         ACTION_PATH: ${{ github.action_path }}
@@ -80,7 +80,7 @@ runs:
     - name: Run Claude Code review
       id: review
       if: steps.detect.outputs.has_changes == 'true'
-      run: ${{ github.action_path }}/scripts/run-claude.sh
+      run: python3 ${{ github.action_path }}/scripts/run_claude.py
       shell: bash
       env:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
@@ -93,7 +93,7 @@ runs:
     - name: Post PR comment
       id: comment
       if: steps.detect.outputs.has_changes == 'true'
-      run: ${{ github.action_path }}/scripts/post-comment.sh
+      run: python3 ${{ github.action_path }}/scripts/post_comment.py
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
