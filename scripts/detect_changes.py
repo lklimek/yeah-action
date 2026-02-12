@@ -19,9 +19,9 @@ Outputs (written to GITHUB_OUTPUT):
 """
 
 import os
-import re
 import subprocess
 import sys
+from pathlib import PurePosixPath
 
 # ---------------------------------------------------------------------------
 # Ensure tomli is available before importing rust_deps (needs TOML parsing).
@@ -86,8 +86,10 @@ def _force_mode():
     ecosystem = os.environ.get("INPUT_ECOSYSTEM", "")
 
     if not ecosystem:
-        # Infer ecosystem from the dependency name.
-        if re.match(r"^[a-zA-Z0-9][-a-zA-Z0-9]*\.[a-zA-Z]{2,}/", dep):
+        # Infer ecosystem: Go modules start with a domain (contain a dot
+        # before the first slash), e.g. github.com/lib/pq.
+        first_slash = dep.find("/")
+        if first_slash > 0 and "." in dep[:first_slash]:
             ecosystem = "go"
         elif _has_cargo_toml():
             ecosystem = "rust"
@@ -152,9 +154,15 @@ def _auto_detect_mode():
     print("Changed files:")
     print(changed_files)
 
-    # Detect Go and Rust dependency file changes.
-    has_go = bool(re.search(r"(^|/)go\.(mod|sum)$", changed_files, re.MULTILINE))
-    has_rust = bool(re.search(r"(^|/)Cargo\.(toml|lock)$", changed_files, re.MULTILINE))
+    # Detect Go and Rust dependency file changes by checking basenames.
+    file_list = [f for f in changed_files.splitlines() if f.strip()]
+    has_go = any(
+        PurePosixPath(f).name in ("go.mod", "go.sum") for f in file_list
+    )
+    has_rust = any(
+        PurePosixPath(f).name in ("Cargo.toml", "Cargo.lock")
+        for f in file_list
+    )
 
     if has_go:
         print("Detected Go dependency file changes")

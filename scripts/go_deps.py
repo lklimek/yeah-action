@@ -2,9 +2,9 @@
 """
 go_deps.py
 
-Extracts Go dependency changes between two Git commits by parsing go.mod
-diffs. When go.sum is present and changed, also extracts transitive
-dependency changes from it.
+Extracts Go dependency changes between two Git commits by comparing go.mod
+and go.sum files at each commit. Uses structured parsing of both formats
+rather than regex-based diff scraping.
 
 Output format (one per line):
     module@old_version..new_version   (version change)
@@ -12,7 +12,6 @@ Output format (one per line):
     module                            (version unknown)
 """
 
-import re
 import subprocess
 import sys
 
@@ -39,94 +38,116 @@ def _changed_files(base_sha, head_sha, *patterns):
     return [f for f in output.splitlines() if f.strip()]
 
 
-# go.mod requirement line:  +	github.com/lib/pq v1.10.9
-_GOMOD_REQ = re.compile(
-    r"^\+\s*([-a-zA-Z0-9_.~/]+\.[a-zA-Z]{2,}[-a-zA-Z0-9_.~/]*)\s+(v\S+)"
-)
+def _parse_gomod(content):
+    """Parse go.mod content and return {module_path: version}.
 
-# go.sum entry:  github.com/lib/pq v1.10.9 h1:...
-_GOSUM_ENTRY = re.compile(
-    r"^\s*([-a-zA-Z0-9_.~/]+\.[a-zA-Z]{2,}[-a-zA-Z0-9_.~/]*)\s+(v[0-9]\S+)"
-)
+    Handles both single-line and block require directives:
+        require github.com/lib/pq v1.10.9
+        require (
+            github.com/lib/pq v1.10.9
+            golang.org/x/text v0.14.0 // indirect
+        )
+    """
+    if not content:
+        return {}
+
+    deps = {}
+    in_require = False
+
+    for line in content.splitlines():
+        stripped = line.strip()
+
+        if not stripped or stripped.startswith("//"):
+            continue
+
+        if stripped == ")":
+            in_require = False
+            continue
+
+        if stripped.startswith("require ("):
+            in_require = True
+            continue
+
+        if stripped.startswith("require ") and not in_require:
+            # Single-line: require <module> <version> [// comment]
+            parts = stripped.split()
+            if len(parts) >= 3 and parts[2].startswith("v"):
+                deps[parts[1]] = parts[2]
+            continue
+
+        if in_require:
+            # Block entry: <module> <version> [// comment]
+            parts = stripped.split()
+            if len(parts) >= 2 and parts[1].startswith("v"):
+                deps[parts[0]] = parts[1]
+
+    return deps
+
+
+def _parse_gosum(content):
+    """Parse go.sum content and return {module: set(versions)}.
+
+    go.sum lines have the format:
+        module version h1:hash=
+        module version/go.mod h1:hash=
+    Entries with /go.mod suffix are skipped to avoid duplicates.
+    """
+    if not content:
+        return {}
+
+    deps = {}
+    for line in content.splitlines():
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+
+        module, version = parts[0], parts[1]
+
+        # Skip /go.mod checksum entries.
+        if version.endswith("/go.mod"):
+            continue
+
+        deps.setdefault(module, set()).add(version)
+
+    return deps
 
 
 def _deps_from_gomod(base_sha, head_sha, gomod_path):
-    """Parse a go.mod diff and return {module: (old_ver, new_ver)}."""
-    diff = _run_git("diff", f"{base_sha}...{head_sha}", "--", gomod_path)
-    if not diff:
-        return {}
+    """Compare old/new go.mod and return {module: (old_ver, new_ver)}."""
+    old_content = _run_git("show", f"{base_sha}:{gomod_path}")
+    new_content = _run_git("show", f"{head_sha}:{gomod_path}")
 
-    new_modules = {}
-    for line in diff.splitlines():
-        if line.startswith("+++"):
-            continue
-        m = _GOMOD_REQ.match(line)
-        if m:
-            new_modules[m.group(1)] = m.group(2)
+    old_deps = _parse_gomod(old_content)
+    new_deps = _parse_gomod(new_content)
 
-    if not new_modules:
-        return {}
-
-    # Lookup old versions from the base go.mod.
-    base_content = _run_git("show", f"{base_sha}:{gomod_path}")
     results = {}
-    for mod, new_ver in new_modules.items():
-        old_ver = None
-        if base_content:
-            pattern = re.compile(
-                rf"^\s*{re.escape(mod)}\s+(v\S+)", re.MULTILINE
-            )
-            hit = pattern.search(base_content)
-            if hit:
-                old_ver = hit.group(1)
-        results[mod] = (old_ver, new_ver)
+    for mod, new_ver in new_deps.items():
+        if mod not in old_deps or old_deps[mod] != new_ver:
+            results[mod] = (old_deps.get(mod), new_ver)
 
     return results
 
 
 def _deps_from_gosum(base_sha, head_sha, gosum_path):
-    """Parse a go.sum diff and return {module: (old_ver, new_ver)}.
+    """Compare old/new go.sum and return {module: (old_ver, new_ver)}.
 
-    Detects added and removed dependency checksums to infer version changes,
-    including transitive dependencies not listed in go.mod.
+    Detects transitive dependency changes not listed in go.mod.
     """
-    diff = _run_git("diff", f"{base_sha}...{head_sha}", "--", gosum_path)
-    if not diff:
-        return {}
+    old_content = _run_git("show", f"{base_sha}:{gosum_path}")
+    new_content = _run_git("show", f"{head_sha}:{gosum_path}")
 
-    added = {}   # module -> set of versions
-    removed = {}  # module -> set of versions
-
-    for line in diff.splitlines():
-        if line.startswith("+++") or line.startswith("---"):
-            continue
-
-        is_add = line.startswith("+")
-        is_rm = line.startswith("-")
-        if not (is_add or is_rm):
-            continue
-
-        content = line[1:]
-
-        # Skip /go.mod checksum lines to avoid duplicates.
-        if "/go.mod " in content:
-            continue
-
-        m = _GOSUM_ENTRY.match(content)
-        if not m:
-            continue
-
-        mod, ver = m.group(1), m.group(2)
-        target = added if is_add else removed
-        target.setdefault(mod, set()).add(ver)
+    old_sums = _parse_gosum(old_content)
+    new_sums = _parse_gosum(new_content)
 
     results = {}
-    for mod in added:
-        new_vers = sorted(added[mod])
-        old_vers = sorted(removed.get(mod, set()))
-        new_ver = new_vers[-1] if new_vers else None
-        old_ver = old_vers[0] if old_vers else None
-        if new_ver:
+    for mod, new_versions in new_sums.items():
+        old_versions = old_sums.get(mod, set())
+        added = new_versions - old_versions
+        removed = old_versions - new_versions
+
+        if added:
+            new_ver = sorted(added)[-1]
+            old_ver = sorted(removed)[0] if removed else None
             results[mod] = (old_ver, new_ver)
 
     return results

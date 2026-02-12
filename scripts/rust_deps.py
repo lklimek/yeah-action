@@ -2,10 +2,8 @@
 """
 rust_deps.py
 
-Extracts Rust crate dependency changes between two Git commits by parsing
-Cargo.toml diffs. When Cargo.lock is present and changed, also extracts
-transitive dependency changes using TOML parsing for reliable version
-resolution.
+Extracts Rust crate dependency changes between two Git commits by comparing
+Cargo.toml and Cargo.lock files at each commit using TOML parsing.
 
 Output format (one per line):
     crate@old_version..new_version   (version change)
@@ -13,7 +11,6 @@ Output format (one per line):
     crate                            (version unknown)
 """
 
-import re
 import subprocess
 import sys
 
@@ -45,27 +42,16 @@ def _changed_files(base_sha, head_sha, *patterns):
     return [f for f in output.splitlines() if f.strip()]
 
 
-_SECTION_RE = re.compile(r"^\[([^\]]+)\]")
-
-# crate_name = "version"
-_INLINE_RE = re.compile(r'^\s*([a-zA-Z0-9_-]+)\s*=\s*"([^"]*)"')
-
-# crate_name = { version = "version", ... }
-_TABLE_VER_RE = re.compile(
-    r'^\s*([a-zA-Z0-9_-]+)\s*=\s*\{.*version\s*=\s*"([^"]*)"'
-)
-
-# crate_name = { ... }  or  crate_name.workspace = true  (no version)
-_BARE_DEP_RE = re.compile(r"^\s*([a-zA-Z0-9_-]+)\s*=")
-
-
-def _is_dep_section(name):
-    """Return True if the TOML section header is a dependency section."""
-    return "dependencies" in name.lower()
-
-
 def _versions_from_toml(content):
-    """Parse a Cargo.toml string and return {crate_name: version_or_None}."""
+    """Parse a Cargo.toml string and return {crate_name: version_or_None}.
+
+    Extracts dependency versions from all dependency sections:
+    [dependencies], [dev-dependencies], [build-dependencies],
+    [workspace.dependencies], and [target.*.dependencies].
+    """
+    if not content:
+        return {}
+
     versions = {}
     try:
         parsed = tomllib.loads(content)
@@ -103,71 +89,26 @@ def _versions_from_toml(content):
 
 
 def _deps_from_cargo_toml(base_sha, head_sha, cargo_path):
-    """Parse a Cargo.toml diff and return {crate: (old_ver, new_ver)}."""
-    diff = _run_git("diff", f"{base_sha}...{head_sha}", "--", cargo_path)
-    if not diff:
-        return {}
+    """Compare old/new Cargo.toml and return {crate: (old_ver, new_ver)}."""
+    old_content = _run_git("show", f"{base_sha}:{cargo_path}")
+    new_content = _run_git("show", f"{head_sha}:{cargo_path}")
 
-    in_dep = False
-    crates = {}  # name -> new_version or None
+    old_versions = _versions_from_toml(old_content)
+    new_versions = _versions_from_toml(new_content)
 
-    for line in diff.splitlines():
-        if line.startswith("+++") or line.startswith("---"):
-            continue
+    results = {}
+    for name, new_ver in new_versions.items():
+        if name not in old_versions or old_versions[name] != new_ver:
+            results[name] = (old_versions.get(name), new_ver)
 
-        # Strip diff marker for section detection.
-        content = line[1:] if line and line[0] in "+- " else line
-
-        sec = _SECTION_RE.match(content.strip())
-        if sec:
-            in_dep = _is_dep_section(sec.group(1))
-            continue
-
-        # Catch complex headers like [target.'cfg(...)'.dependencies].
-        stripped = content.strip()
-        if stripped.startswith("[") and stripped.endswith("]"):
-            in_dep = _is_dep_section(stripped)
-            continue
-
-        # Only process added lines inside dependency sections.
-        if not line.startswith("+") or not in_dep:
-            continue
-
-        dep_line = line[1:]
-        dep_stripped = dep_line.strip()
-        if not dep_stripped or dep_stripped.startswith("#"):
-            continue
-
-        m = _INLINE_RE.match(dep_line)
-        if m:
-            crates[m.group(1)] = m.group(2)
-            continue
-
-        m = _TABLE_VER_RE.match(dep_line)
-        if m:
-            crates[m.group(1)] = m.group(2)
-            continue
-
-        m = _BARE_DEP_RE.match(dep_line)
-        if m:
-            crates[m.group(1)] = None
-            continue
-
-    if not crates:
-        return {}
-
-    # Lookup old versions via TOML parsing of the base file.
-    base_content = _run_git("show", f"{base_sha}:{cargo_path}")
-    base_versions = _versions_from_toml(base_content) if base_content else {}
-
-    return {
-        name: (base_versions.get(name), new_ver)
-        for name, new_ver in crates.items()
-    }
+    return results
 
 
 def _parse_lock(content):
     """Parse a Cargo.lock string and return {package_name: version}."""
+    if not content:
+        return {}
+
     pkgs = {}
     try:
         parsed = tomllib.loads(content)
@@ -186,8 +127,8 @@ def _deps_from_cargo_lock(base_sha, head_sha, lock_path):
     old_content = _run_git("show", f"{base_sha}:{lock_path}")
     new_content = _run_git("show", f"{head_sha}:{lock_path}")
 
-    old_pkgs = _parse_lock(old_content) if old_content else {}
-    new_pkgs = _parse_lock(new_content) if new_content else {}
+    old_pkgs = _parse_lock(old_content)
+    new_pkgs = _parse_lock(new_content)
 
     results = {}
     for name, new_ver in new_pkgs.items():
