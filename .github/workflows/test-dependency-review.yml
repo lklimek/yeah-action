@@ -2,27 +2,6 @@ name: Test Dependency Security Review
 
 on:
   pull_request:
-    paths:
-      - 'test-projects/go-project/go.mod'
-      - 'test-projects/go-project/go.sum'
-      - 'test-projects/rust-project/Cargo.toml'
-      - 'test-projects/rust-project/Cargo.lock'
-      - '**/go.mod'
-      - '**/Cargo.toml'
-
-  workflow_dispatch:
-    inputs:
-      dependency:
-        description: 'Dependency to review (e.g., github.com/lib/pq 1.10.0..1.10.9, serde 1.0.196..1.0.197)'
-        required: true
-        type: string
-      ecosystem:
-        description: 'Ecosystem of the dependency'
-        required: true
-        type: choice
-        options:
-          - go
-          - rust
 
 permissions:
   contents: read
@@ -30,8 +9,24 @@ permissions:
 
 jobs:
   dependency-review:
-    name: Dependency Security Review
+    name: "Test: ${{ matrix.name }}"
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "Go – github.com/lib/pq upgrade"
+            dependency: "github.com/lib/pq 1.10.0..1.10.9"
+            ecosystem: go
+          - name: "Go – golang.org/x/net upgrade"
+            dependency: "golang.org/x/net 0.21.0..0.23.0"
+            ecosystem: go
+          - name: "Rust – serde upgrade"
+            dependency: "serde 1.0.196..1.0.197"
+            ecosystem: rust
+          - name: "Rust – tokio upgrade"
+            dependency: "tokio 1.36.0..1.37.0"
+            ecosystem: rust
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,7 +37,7 @@ jobs:
         uses: ./
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          dependency: ${{ inputs.dependency || '' }}
-          ecosystem: ${{ inputs.ecosystem || '' }}
+          dependency: ${{ matrix.dependency }}
+          ecosystem: ${{ matrix.ecosystem }}
           model: sonnet
           max_turns: 50
