@@ -42,7 +42,11 @@ async def _run_review(prompt_content, claude_model, max_turns):
             - total_cost_usd: float | None
             - num_turns: int
     """
-    result_parts = []
+    # assistant_parts collects intermediate text blocks as a fallback in
+    # case the SDK crashes before delivering a final ResultMessage.
+    assistant_parts = []
+    # result_text holds the authoritative output from the last ResultMessage.
+    result_text = None
     error_message = None
     usage_info = {
         "input_tokens": 0,
@@ -64,33 +68,42 @@ async def _run_review(prompt_content, claude_model, max_turns):
                 print(f"[debug] ResultMessage received "
                       f"(length={len(message.result) if message.result else 0})")
                 if message.result:
-                    result_parts.append(message.result)
+                    result_text = message.result
 
-                # Capture usage information from the final ResultMessage
+                # Accumulate usage across all ResultMessages (sub-agents
+                # may each emit their own ResultMessage).
                 if message.usage:
-                    usage_info["input_tokens"] = message.usage.get("input_tokens", 0)
-                    usage_info["output_tokens"] = message.usage.get("output_tokens", 0)
+                    usage_info["input_tokens"] += message.usage.get("input_tokens", 0)
+                    usage_info["output_tokens"] += message.usage.get("output_tokens", 0)
                 if message.total_cost_usd is not None:
-                    usage_info["total_cost_usd"] = message.total_cost_usd
+                    if usage_info["total_cost_usd"] is None:
+                        usage_info["total_cost_usd"] = message.total_cost_usd
+                    else:
+                        usage_info["total_cost_usd"] += message.total_cost_usd
                 if message.num_turns:
-                    usage_info["num_turns"] = message.num_turns
+                    usage_info["num_turns"] += message.num_turns
 
-                print(f"[debug] Usage: {usage_info}")
+                print(f"[debug] Usage so far: {usage_info}")
             elif isinstance(message, AssistantMessage):
                 for block in message.content:
                     if isinstance(block, TextBlock):
                         print(f"[debug] AssistantMessage TextBlock "
                               f"(length={len(block.text)})")
-                        result_parts.append(block.text)
+                        assistant_parts.append(block.text)
     except Exception as exc:
         error_message = str(exc)
         print(f"Warning: Claude Code stream error: {exc}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
-        if result_parts:
-            print(f"[debug] Returning {len(result_parts)} partial result(s) "
+        if assistant_parts:
+            print(f"[debug] Returning {len(assistant_parts)} partial result(s) "
                   f"collected before the error")
 
-    output = "\n\n".join(result_parts)
+    # Use the authoritative ResultMessage output when available; fall back
+    # to collected AssistantMessage text blocks on SDK crash.
+    if result_text is not None:
+        output = result_text
+    else:
+        output = "\n\n".join(assistant_parts)
 
     if error_message:
         notice = (
@@ -110,6 +123,13 @@ def main():
         if not os.environ.get(var):
             print(f"Error: {var} must be set", file=sys.stderr)
             sys.exit(1)
+
+    # Strip empty auth env-vars so the CLI does not attempt an auth
+    # method that was never configured (e.g. empty CLAUDE_CODE_OAUTH_TOKEN
+    # would make the CLI try OAuth and hit quota errors).
+    for auth_var in ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"):
+        if auth_var in os.environ and not os.environ[auth_var].strip():
+            del os.environ[auth_var]
 
     has_api_key = bool(os.environ.get("ANTHROPIC_API_KEY"))
     has_oauth = bool(os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"))
