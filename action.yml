@@ -107,9 +107,10 @@ runs:
         ECOSYSTEM: ${{ steps.detect.outputs.ecosystem }}
 
     # Step 6: Post the review results as a comment on the pull request.
+    # Run even if the review step failed so error details appear on the PR.
     - name: Post PR comment
       id: comment
-      if: steps.detect.outputs.has_changes == 'true'
+      if: steps.detect.outputs.has_changes == 'true' && !cancelled()
       run: python3 ${{ github.action_path }}/scripts/post_comment.py
       shell: bash
       env:
