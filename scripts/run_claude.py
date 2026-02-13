@@ -2,7 +2,7 @@
 """
 run_claude.py
 
-Runs the Claude Code security review using the claude-code-sdk Python
+Runs the Claude Code security review using the claude-agent-sdk Python
 package. Captures the review output to a file and exposes it via
 GITHUB_OUTPUT.
 
@@ -18,8 +18,8 @@ import sys
 import tempfile
 import traceback
 
-from claude_code_sdk import ClaudeCodeOptions, query
-from claude_code_sdk.types import AssistantMessage, ResultMessage, TextBlock
+from claude_agent_sdk import ClaudeAgentOptions, query
+from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock
 
 
 _FALLBACK_REVIEW = (
@@ -41,7 +41,7 @@ async def _run_review(prompt_content, claude_model, max_turns, cwd):
     try:
         async for message in query(
             prompt=prompt_content,
-            options=ClaudeCodeOptions(
+            options=ClaudeAgentOptions(
                 model=claude_model,
                 max_turns=int(max_turns),
                 permission_mode="bypassPermissions",
