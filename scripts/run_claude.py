@@ -12,6 +12,7 @@ Requires the @anthropic-ai/claude-code npm package to be installed
 
 import asyncio
 import os
+import pathlib
 import sys
 import tempfile
 
@@ -36,6 +37,7 @@ async def _run_review(prompt_content, claude_model, max_turns):
             model=claude_model,
             max_turns=int(max_turns),
             permission_mode="bypassPermissions",
+            cwd=str(pathlib.Path.cwd()),
         ),
     ):
         if isinstance(message, ResultMessage):
