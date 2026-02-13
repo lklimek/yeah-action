@@ -1,0 +1,27 @@
+name: Test Dependency Security Review
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  dependency-review:
+    if: github.event.pull_request.draft == false
+    name: Dependency Security Review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run dependency review
+        uses: ./
+        with:
+          oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          dependency: "github.com/lib/pq 1.10.0..1.10.9,golang.org/x/net 0.21.0..0.23.0,serde 1.0.196..1.0.197,tokio 1.36.0..1.37.0"
+          model: haiku
+          max_turns: 50
