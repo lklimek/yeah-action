@@ -124,6 +124,13 @@ def main():
             print(f"Error: {var} must be set", file=sys.stderr)
             sys.exit(1)
 
+    # Strip empty auth env-vars so the CLI does not attempt an auth
+    # method that was never configured (e.g. empty CLAUDE_CODE_OAUTH_TOKEN
+    # would make the CLI try OAuth and hit quota errors).
+    for auth_var in ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"):
+        if auth_var in os.environ and not os.environ[auth_var].strip():
+            del os.environ[auth_var]
+
     has_api_key = bool(os.environ.get("ANTHROPIC_API_KEY"))
     has_oauth = bool(os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"))
     if not has_api_key and not has_oauth:
