@@ -74,6 +74,36 @@ runs:
         BASE_SHA: ${{ github.event.pull_request.base.sha }}
         HEAD_SHA: ${{ github.event.pull_request.head.sha }}
 
+    # Step 1.5: Install ecosystem-specific dependency scanning tools.
+    # These are used by Claude during the review to scan for known
+    # vulnerabilities before supplementing with online database research.
+    - name: Install dependency scanning tools
+      id: scan-tools
+      if: steps.detect.outputs.has_changes == 'true'
+      run: |
+        ECOSYSTEM="${{ steps.detect.outputs.ecosystem }}"
+        TOOLS=""
+        if [ "$ECOSYSTEM" = "go" ] || [ "$ECOSYSTEM" = "mixed" ]; then
+          if command -v go &>/dev/null; then
+            echo "Installing govulncheck..."
+            go install golang.org/x/vuln/cmd/govulncheck@latest
+            TOOLS="${TOOLS:+$TOOLS,}govulncheck"
+          else
+            echo "::warning::Go toolchain not found — skipping govulncheck"
+          fi
+        fi
+        if [ "$ECOSYSTEM" = "rust" ] || [ "$ECOSYSTEM" = "mixed" ]; then
+          if command -v cargo &>/dev/null; then
+            echo "Installing cargo-audit..."
+            cargo install cargo-audit
+            TOOLS="${TOOLS:+$TOOLS,}cargo-audit"
+          else
+            echo "::warning::Rust toolchain not found — skipping cargo-audit"
+          fi
+        fi
+        echo "tools=$TOOLS" >> "$GITHUB_OUTPUT"
+      shell: bash
+
     # Step 2: Prepare the Claude Code environment (copy agent configs).
     - name: Setup Claude environment
       id: setup
@@ -124,6 +154,7 @@ runs:
         MAX_TURNS: ${{ inputs.max_turns }}
         PROMPT_FILE: ${{ steps.prompt.outputs.prompt_file }}
         ECOSYSTEM: ${{ steps.detect.outputs.ecosystem }}
+        SCANNING_TOOLS: ${{ steps.scan-tools.outputs.tools }}
 
     # Step 6: Post the review results as a comment on the pull request.
     # Run even if the review step failed so error details appear on the PR.

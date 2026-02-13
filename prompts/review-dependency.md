@@ -37,14 +37,23 @@ git clone --depth=100 <upstream-repo-url> /tmp/claude/<package-name>
 ```
 
 ### 2c. Known Vulnerability Scan
-Search for CVEs and security advisories using ecosystem-appropriate sources:
+
+**First, run the pre-installed scanning tools** (check `$SCANNING_TOOLS` env var for available tools):
+
+| Ecosystem | Tool | Command |
+|---|---|---|
+| Go | govulncheck | `govulncheck ./...` (run from repo root where `go.mod` lives) |
+| Rust | cargo audit | `cargo audit` (run from repo root where `Cargo.lock` lives) |
+
+Include the full tool output in your analysis. If a tool is not listed in `$SCANNING_TOOLS`, skip it.
+
+**Then supplement with online database lookups** to catch advisories not yet indexed by the tools:
 
 | Source | Method |
 |---|---|
 | OSV.dev | `POST https://api.osv.dev/v1/query` with package name and ecosystem |
 | GitHub Advisory Database | `gh api /advisories?ecosystem=<eco>&affects=<pkg>` |
 | NVD | Web search for package CVEs |
-| Ecosystem-specific | `govulncheck` (Go), `cargo audit` (Rust), `npm audit` (Node), `pip-audit` (Python) |
 | Web search | `<package-name> CVE vulnerability security advisory` |
 
 Check if there are commonly confused packages with similar names that may pollute search results.
