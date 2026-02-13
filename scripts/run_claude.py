@@ -21,7 +21,6 @@ import traceback
 from claude_agent_sdk import ClaudeAgentOptions, query
 from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock
 
-
 _FALLBACK_REVIEW = (
     "> **Note**: The automated Claude Code review could not be completed.\n"
     "> This may be due to a timeout, API error, or insufficient context.\n"
@@ -30,14 +29,27 @@ _FALLBACK_REVIEW = (
 
 
 async def _run_review(prompt_content, claude_model, max_turns):
-    """Run Claude Code review and return the output text.
+    """Run Claude Code review and return the output text and usage info.
 
     Collects messages as they stream in.  If the SDK crashes partway
     through (e.g. exit-code 1), partial output is preserved and an
     error notice is appended so it appears in the PR comment.
+
+    Returns:
+        tuple: (output_text, usage_dict) where usage_dict contains:
+            - input_tokens: int
+            - output_tokens: int
+            - total_cost_usd: float | None
+            - num_turns: int
     """
     result_parts = []
     error_message = None
+    usage_info = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_cost_usd": None,
+        "num_turns": 0,
+    }
 
     try:
         async for message in query(
@@ -53,6 +65,17 @@ async def _run_review(prompt_content, claude_model, max_turns):
                       f"(length={len(message.result) if message.result else 0})")
                 if message.result:
                     result_parts.append(message.result)
+
+                # Capture usage information from the final ResultMessage
+                if message.usage:
+                    usage_info["input_tokens"] = message.usage.get("input_tokens", 0)
+                    usage_info["output_tokens"] = message.usage.get("output_tokens", 0)
+                if message.total_cost_usd is not None:
+                    usage_info["total_cost_usd"] = message.total_cost_usd
+                if message.num_turns:
+                    usage_info["num_turns"] = message.num_turns
+
+                print(f"[debug] Usage: {usage_info}")
             elif isinstance(message, AssistantMessage):
                 for block in message.content:
                     if isinstance(block, TextBlock):
@@ -79,7 +102,7 @@ async def _run_review(prompt_content, claude_model, max_turns):
         )
         output = output + notice if output else notice
 
-    return output
+    return output, usage_info
 
 
 def main():
@@ -132,8 +155,16 @@ def main():
     print(f"[debug] prompt length: {len(prompt_content)} chars")
     print("Running Claude Code review...")
     sys.stdout.flush()
+
+    usage_info = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_cost_usd": None,
+        "num_turns": 0,
+    }
+
     try:
-        output = asyncio.run(
+        output, usage_info = asyncio.run(
             _run_review(prompt_content, claude_model, max_turns)
         )
     except Exception as exc:
@@ -156,6 +187,7 @@ def main():
         f.write(output)
 
     print(f"Review written to {review_file}")
+    print(f"Usage: {usage_info}")
 
     github_output = os.environ.get("GITHUB_OUTPUT", "")
     if github_output:
@@ -165,6 +197,14 @@ def main():
             f.write(output[:65000])
             f.write("\n")
             f.write("YEAH_ACTION_EOF\n")
+            f.write(f"input_tokens={usage_info['input_tokens']}\n")
+            f.write(f"output_tokens={usage_info['output_tokens']}\n")
+            f.write(f"total_tokens={usage_info['input_tokens'] + usage_info['output_tokens']}\n")
+            if usage_info['total_cost_usd'] is not None:
+                f.write(f"total_cost_usd={usage_info['total_cost_usd']:.6f}\n")
+            else:
+                f.write("total_cost_usd=\n")
+            f.write(f"num_turns={usage_info['num_turns']}\n")
 
 
 if __name__ == "__main__":

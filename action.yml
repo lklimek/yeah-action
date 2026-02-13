@@ -43,6 +43,15 @@ outputs:
   ecosystem:
     description: "Detected ecosystem(s)"
     value: ${{ steps.detect.outputs.ecosystem }}
+  input_tokens:
+    description: "Number of input tokens used"
+    value: ${{ steps.review.outputs.input_tokens }}
+  output_tokens:
+    description: "Number of output tokens used"
+    value: ${{ steps.review.outputs.output_tokens }}
+  total_tokens:
+    description: "Total number of tokens used"
+    value: ${{ steps.review.outputs.total_tokens }}
 
 runs:
   using: "composite"
@@ -119,3 +128,8 @@ runs:
         REVIEW_FILE: ${{ steps.review.outputs.review_file }}
         ECOSYSTEM: ${{ steps.detect.outputs.ecosystem }}
         DEPENDENCIES: ${{ steps.detect.outputs.dependencies }}
+        INPUT_TOKENS: ${{ steps.review.outputs.input_tokens }}
+        OUTPUT_TOKENS: ${{ steps.review.outputs.output_tokens }}
+        TOTAL_TOKENS: ${{ steps.review.outputs.total_tokens }}
+        TOTAL_COST_USD: ${{ steps.review.outputs.total_cost_usd }}
+        NUM_TURNS: ${{ steps.review.outputs.num_turns }}
