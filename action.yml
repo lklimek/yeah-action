@@ -9,8 +9,13 @@ description: "Security audit of changed or updated dependencies using Claude Cod
 
 inputs:
   anthropic_api_key:
-    description: "Anthropic API key for Claude Code"
-    required: true
+    description: "Anthropic API key for Claude Code (required unless oauth_token is set)"
+    required: false
+    default: ""
+  oauth_token:
+    description: "Claude Code OAuth token for subscription-based auth (Pro/Max/Teams/Enterprise). Generate with 'claude setup-token'."
+    required: false
+    default: ""
   dependency:
     description: "Force review of specific dependencies. Comma-separated for multiple (e.g., github.com/lib/pq 1.10.0..1.11.0,serde 1.0.196..1.0.197). Bypasses auto-detection."
     required: false
@@ -95,6 +100,7 @@ runs:
       shell: bash
       env:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.oauth_token }}
         CLAUDE_MODEL: ${{ inputs.model }}
         MAX_TURNS: ${{ inputs.max_turns }}
         PROMPT_FILE: ${{ steps.prompt.outputs.prompt_file }}

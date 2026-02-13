@@ -56,10 +56,21 @@ async def _run_review(prompt_content, claude_model, max_turns):
 
 
 def main():
-    for var in ("ANTHROPIC_API_KEY", "CLAUDE_MODEL", "MAX_TURNS", "PROMPT_FILE"):
+    for var in ("CLAUDE_MODEL", "MAX_TURNS", "PROMPT_FILE"):
         if not os.environ.get(var):
             print(f"Error: {var} must be set", file=sys.stderr)
             sys.exit(1)
+
+    has_api_key = bool(os.environ.get("ANTHROPIC_API_KEY"))
+    has_oauth = bool(os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"))
+    if not has_api_key and not has_oauth:
+        print("Error: Either ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN "
+              "must be set", file=sys.stderr)
+        sys.exit(1)
+    if has_api_key and has_oauth:
+        print("Warning: Both ANTHROPIC_API_KEY and CLAUDE_CODE_OAUTH_TOKEN "
+              "are set. Claude Code may show an auth conflict warning.",
+              file=sys.stderr)
 
     claude_model = os.environ["CLAUDE_MODEL"]
     max_turns = os.environ["MAX_TURNS"]
@@ -68,6 +79,7 @@ def main():
     print(f"[debug] claude_model={claude_model}")
     print(f"[debug] max_turns={max_turns}")
     print(f"[debug] prompt_file={prompt_file}")
+    print(f"[debug] auth_method={'oauth' if has_oauth else 'api_key'}")
 
     claude_cli = shutil.which("claude")
     print(f"[debug] claude CLI path: {claude_cli}")
