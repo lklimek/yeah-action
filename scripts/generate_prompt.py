@@ -48,7 +48,7 @@ def main():
 
     # Write to a temp file.
     fd, prompt_file = tempfile.mkstemp(
-        prefix="yeah-action-prompt-", suffix=".md", dir="/tmp"
+        prefix="yeah-action-prompt-", suffix=".md"
     )
     with os.fdopen(fd, "w") as f:
         f.write(prompt_content)

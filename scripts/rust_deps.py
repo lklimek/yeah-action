@@ -117,6 +117,7 @@ def _parse_lock(content):
             if name and ver:
                 pkgs[name] = ver
     except Exception:
+        # If the lock file cannot be parsed, treat it as having no packages.
         pass
     return pkgs
 

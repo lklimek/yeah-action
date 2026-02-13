@@ -65,8 +65,15 @@ class Scenario:
 
     @property
     def base_sha(self) -> str:
-        """SHA of the commit *before* the test commit (HEAD~1)."""
-        return self.repo.head.commit.parents[0].hexsha
+        """SHA of the commit *before* the test commit (HEAD~1).
+
+        If the HEAD commit has no parents (e.g., initial commit), fall back
+        to the HEAD commit's own SHA to avoid IndexError.
+        """
+        commit = self.repo.head.commit
+        if commit.parents:
+            return commit.parents[0].hexsha
+        return commit.hexsha
 
     @property
     def head_sha(self) -> str:
@@ -113,9 +120,6 @@ class Scenario:
             env["INPUT_ECOSYSTEM"] = ecosystem
         else:
             env.pop("INPUT_ECOSYSTEM", None)
-        # Remove stale env vars that might interfere.
-        env.pop("INPUT_DEPENDENCY", None)
-        env["INPUT_DEPENDENCY"] = dependency
         if env_overrides:
             env.update(env_overrides)
 
