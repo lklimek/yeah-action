@@ -55,8 +55,7 @@ class Scenario:
             if item.a_path.startswith("test-projects/")
         ]
         untracked = [
-            f for f in self.repo.untracked_files
-            if f.startswith("test-projects/")
+            f for f in self.repo.untracked_files if f.startswith("test-projects/")
         ]
         to_add = changed + untracked
         if to_add:
@@ -104,9 +103,9 @@ class Scenario:
         )
         return self._parse_output()
 
-    def run_detect_force(self, dependency: str, *,
-                         ecosystem: str = "",
-                         env_overrides: dict | None = None) -> dict[str, str]:
+    def run_detect_force(
+        self, dependency: str, *, ecosystem: str = "", env_overrides: dict | None = None
+    ) -> dict[str, str]:
         """Run ``detect_changes.py`` in force mode."""
         import subprocess
 
@@ -134,11 +133,13 @@ class Scenario:
     def get_go_deps(self) -> list[str]:
         """Call ``get_go_deps()`` from go_deps.py directly."""
         from go_deps import get_go_deps
+
         return get_go_deps(self.base_sha, self.head_sha, repo=self.repo)
 
     def get_rust_deps(self) -> list[str]:
         """Call ``get_rust_deps()`` from rust_deps.py directly."""
         from rust_deps import get_rust_deps
+
         return get_rust_deps(self.base_sha, self.head_sha, repo=self.repo)
 
     # -- output parsing -----------------------------------------------------
@@ -172,11 +173,9 @@ def scenario(tmp_path):
     shutil.copytree(str(TEST_PROJECTS_SRC), str(dest))
 
     # Create the initial commit.
-    repo.index.add([
-        str(p.relative_to(repo_dir))
-        for p in dest.rglob("*")
-        if p.is_file()
-    ])
+    repo.index.add(
+        [str(p.relative_to(repo_dir)) for p in dest.rglob("*") if p.is_file()]
+    )
     repo.index.commit("initial test-projects content")
 
     output_file = tmp_path / "github_output"

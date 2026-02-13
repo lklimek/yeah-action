@@ -21,8 +21,7 @@ def main():
     template_path = os.path.join(action_path, "prompts", "review-dependency.md")
 
     if not os.path.isfile(template_path):
-        print(f"Error: Prompt template not found at {template_path}",
-              file=sys.stderr)
+        print(f"Error: Prompt template not found at {template_path}", file=sys.stderr)
         sys.exit(1)
 
     # Determine the dependency argument: forced > auto-detected > empty.
@@ -37,8 +36,9 @@ def main():
         print(f"Using auto-detected dependencies: {argument}")
     else:
         argument = ""
-        print("No specific dependencies provided; Claude will auto-detect "
-              "from the diff")
+        print(
+            "No specific dependencies provided; Claude will auto-detect from the diff"
+        )
 
     # Read the template and substitute $ARGUMENTS.
     with open(template_path) as f:
@@ -47,9 +47,7 @@ def main():
     prompt_content = template_content.replace("$ARGUMENTS", argument)
 
     # Write to a temp file.
-    fd, prompt_file = tempfile.mkstemp(
-        prefix="yeah-action-prompt-", suffix=".md"
-    )
+    fd, prompt_file = tempfile.mkstemp(prefix="yeah-action-prompt-", suffix=".md")
     with os.fdopen(fd, "w") as f:
         f.write(prompt_content)
 

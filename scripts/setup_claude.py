@@ -30,8 +30,9 @@ def main():
     if action_claude_md.is_file():
         target_claude_md = claude_dir / "CLAUDE.md"
         if target_claude_md.is_file():
-            print("Existing CLAUDE.md found in workspace; appending action "
-                  "instructions.")
+            print(
+                "Existing CLAUDE.md found in workspace; appending action instructions."
+            )
             with open(target_claude_md, "a") as f:
                 f.write("\n---\n\n")
                 f.write(action_claude_md.read_text())
