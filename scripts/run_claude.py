@@ -196,8 +196,12 @@ def main():
         )
         sys.exit(1)
 
-    fd, review_file = tempfile.mkstemp(prefix="yeah-action-review-", suffix=".md")
-    os.close(fd)
+    report_dir = os.path.join(
+        os.environ.get("RUNNER_TEMP", tempfile.gettempdir()),
+        "yeah-action-reports",
+    )
+    os.makedirs(report_dir, exist_ok=True)
+    review_file = os.path.join(report_dir, "dependency-review.md")
 
     if not os.path.isfile(prompt_file):
         print(f"Error: Prompt file not found at {prompt_file}", file=sys.stderr)
@@ -256,6 +260,7 @@ def main():
     if github_output:
         with open(github_output, "a") as f:
             f.write(f"review_file={review_file}\n")
+            f.write(f"report_dir={report_dir}\n")
             delimiter = secrets.token_hex(16)
             f.write(f"review<<{delimiter}\n")
             f.write(output[:65000])

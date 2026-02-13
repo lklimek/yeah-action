@@ -73,6 +73,7 @@ Provide **one** of the following:
 | `input_tokens` | Input tokens used |
 | `output_tokens` | Output tokens used |
 | `total_tokens` | Total tokens used |
+| `report_dir` | Path to the directory containing the review report files (also uploaded as `dependency-security-review` artifact) |
 
 ## Examples
 
