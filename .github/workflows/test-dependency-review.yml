@@ -20,7 +20,7 @@ jobs:
       - name: Run dependency review
         uses: ./
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           dependency: "github.com/lib/pq 1.10.0..1.10.9,golang.org/x/net 0.21.0..0.23.0,serde 1.0.196..1.0.197,tokio 1.36.0..1.37.0"
-          model: sonnet
+          model: haiku
           max_turns: 50
