@@ -61,6 +61,7 @@ def main():
             if inp_tok > 0 or out_tok > 0:
                 usage_parts.append(f"({inp_tok:,} input + {out_tok:,} output)")
     except (ValueError, TypeError):
+        # Ignore if token values are not valid integers (e.g., empty strings)
         pass
 
     if total_cost_usd:
@@ -68,6 +69,7 @@ def main():
             cost = float(total_cost_usd)
             usage_parts.append(f"~${cost:.4f}")
         except (ValueError, TypeError):
+            # Ignore if cost value is not a valid float
             pass
 
     usage_footer = ""
