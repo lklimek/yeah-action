@@ -9,24 +9,8 @@ permissions:
 
 jobs:
   dependency-review:
-    name: "Test: ${{ matrix.name }}"
+    name: Dependency Security Review
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: "Go – github.com/lib/pq upgrade"
-            dependency: "github.com/lib/pq 1.10.0..1.10.9"
-            ecosystem: go
-          - name: "Go – golang.org/x/net upgrade"
-            dependency: "golang.org/x/net 0.21.0..0.23.0"
-            ecosystem: go
-          - name: "Rust – serde upgrade"
-            dependency: "serde 1.0.196..1.0.197"
-            ecosystem: rust
-          - name: "Rust – tokio upgrade"
-            dependency: "tokio 1.36.0..1.37.0"
-            ecosystem: rust
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,7 +21,6 @@ jobs:
         uses: ./
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          dependency: ${{ matrix.dependency }}
-          ecosystem: ${{ matrix.ecosystem }}
+          dependency: "github.com/lib/pq 1.10.0..1.10.9,golang.org/x/net 0.21.0..0.23.0,serde 1.0.196..1.0.197,tokio 1.36.0..1.37.0"
           model: sonnet
           max_turns: 50

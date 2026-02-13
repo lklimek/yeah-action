@@ -12,8 +12,7 @@ import sys
 
 from github import Auth, Github
 
-_MARKER_PREFIX = "<!-- yeah-action-dependency-review"
-_MARKER_SUFFIX = " -->"
+_MARKER = "<!-- yeah-action-dependency-review -->"
 
 
 def main():
@@ -44,10 +43,8 @@ def main():
     with open(review_file) as f:
         review_content = f.read()
 
-    marker = f"{_MARKER_PREFIX}: {dependencies}{_MARKER_SUFFIX}"
-
     comment_body = (
-        f"{marker}\n"
+        f"{_MARKER}\n"
         f"## Dependency Security Review\n\n"
         f"| Field | Value |\n"
         f"|-------|-------|\n"
@@ -81,7 +78,7 @@ def main():
     print(f"Searching for existing review comment on PR #{pr_number}...")
     existing_comment = None
     for comment in pr.get_issue_comments():
-        if marker in comment.body:
+        if _MARKER in comment.body:
             existing_comment = comment
             break
 

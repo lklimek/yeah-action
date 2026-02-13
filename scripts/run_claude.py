@@ -13,8 +13,10 @@ Requires the @anthropic-ai/claude-code npm package to be installed
 import asyncio
 import os
 import pathlib
+import shutil
 import sys
 import tempfile
+import traceback
 
 from claude_code_sdk import ClaudeCodeOptions, query
 from claude_code_sdk.types import AssistantMessage, ResultMessage, TextBlock
@@ -27,7 +29,7 @@ _FALLBACK_REVIEW = (
 )
 
 
-async def _run_review(prompt_content, claude_model, max_turns):
+async def _run_review(prompt_content, claude_model, max_turns, cwd):
     """Run Claude Code review and return the output text."""
     result_parts = []
 
@@ -37,15 +39,17 @@ async def _run_review(prompt_content, claude_model, max_turns):
             model=claude_model,
             max_turns=int(max_turns),
             permission_mode="bypassPermissions",
-            cwd=str(pathlib.Path.cwd()),
+            cwd=cwd,
         ),
     ):
         if isinstance(message, ResultMessage):
+            print(f"[debug] ResultMessage received (length={len(message.result) if message.result else 0})")
             if message.result:
                 result_parts.append(message.result)
         elif isinstance(message, AssistantMessage):
             for block in message.content:
                 if isinstance(block, TextBlock):
+                    print(f"[debug] AssistantMessage TextBlock (length={len(block.text)})")
                     result_parts.append(block.text)
 
     return "\n\n".join(result_parts)
@@ -60,6 +64,20 @@ def main():
     claude_model = os.environ["CLAUDE_MODEL"]
     max_turns = os.environ["MAX_TURNS"]
     prompt_file = os.environ["PROMPT_FILE"]
+    cwd = str(pathlib.Path.cwd())
+
+    print(f"[debug] claude_model={claude_model}")
+    print(f"[debug] max_turns={max_turns}")
+    print(f"[debug] cwd={cwd}")
+    print(f"[debug] prompt_file={prompt_file}")
+
+    claude_cli = shutil.which("claude")
+    print(f"[debug] claude CLI path: {claude_cli}")
+    if not claude_cli:
+        print("Error: 'claude' CLI not found on PATH. "
+              "Install with: npm install -g @anthropic-ai/claude-code",
+              file=sys.stderr)
+        sys.exit(1)
 
     fd, review_file = tempfile.mkstemp(
         prefix="yeah-action-review-", suffix=".md", dir="/tmp"
@@ -74,13 +92,16 @@ def main():
     with open(prompt_file) as f:
         prompt_content = f.read()
 
+    print(f"[debug] prompt length: {len(prompt_content)} chars")
     print("Running Claude Code review...")
     try:
         output = asyncio.run(
-            _run_review(prompt_content, claude_model, max_turns)
+            _run_review(prompt_content, claude_model, max_turns, cwd)
         )
     except Exception as exc:
-        print(f"Warning: Claude Code SDK error: {exc}", file=sys.stderr)
+        print(f"Error: Claude Code SDK failed: {exc}", file=sys.stderr)
+        print("[debug] Full traceback:", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
         output = ""
 
     if output:

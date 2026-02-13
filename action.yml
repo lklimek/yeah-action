@@ -12,7 +12,7 @@ inputs:
     description: "Anthropic API key for Claude Code"
     required: true
   dependency:
-    description: "Force review of a specific dependency (e.g., github.com/lib/pq 1.10.0..1.11.0). Bypasses auto-detection."
+    description: "Force review of specific dependencies. Comma-separated for multiple (e.g., github.com/lib/pq 1.10.0..1.11.0,serde 1.0.196..1.0.197). Bypasses auto-detection."
     required: false
     default: ""
   ecosystem:
