@@ -30,27 +30,41 @@ _FALLBACK_REVIEW = (
 
 
 async def _run_review(prompt_content, claude_model, max_turns, cwd):
-    """Run Claude Code review and return the output text."""
+    """Run Claude Code review and return the output text.
+
+    Collects messages as they stream in.  If the CLI crashes partway
+    through (exit-code 1 after some output), the partial output is
+    still returned so the PR comment contains whatever was produced.
+    """
     result_parts = []
 
-    async for message in query(
-        prompt=prompt_content,
-        options=ClaudeCodeOptions(
-            model=claude_model,
-            max_turns=int(max_turns),
-            permission_mode="bypassPermissions",
-            cwd=cwd,
-        ),
-    ):
-        if isinstance(message, ResultMessage):
-            print(f"[debug] ResultMessage received (length={len(message.result) if message.result else 0})")
-            if message.result:
-                result_parts.append(message.result)
-        elif isinstance(message, AssistantMessage):
-            for block in message.content:
-                if isinstance(block, TextBlock):
-                    print(f"[debug] AssistantMessage TextBlock (length={len(block.text)})")
-                    result_parts.append(block.text)
+    try:
+        async for message in query(
+            prompt=prompt_content,
+            options=ClaudeCodeOptions(
+                model=claude_model,
+                max_turns=int(max_turns),
+                permission_mode="bypassPermissions",
+                cwd=cwd,
+            ),
+        ):
+            if isinstance(message, ResultMessage):
+                print(f"[debug] ResultMessage received "
+                      f"(length={len(message.result) if message.result else 0})")
+                if message.result:
+                    result_parts.append(message.result)
+            elif isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        print(f"[debug] AssistantMessage TextBlock "
+                              f"(length={len(block.text)})")
+                        result_parts.append(block.text)
+    except Exception as exc:
+        print(f"Warning: Claude Code stream error: {exc}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        if result_parts:
+            print(f"[debug] Returning {len(result_parts)} partial result(s) "
+                  f"collected before the error")
 
     return "\n\n".join(result_parts)
 
@@ -94,15 +108,10 @@ def main():
 
     print(f"[debug] prompt length: {len(prompt_content)} chars")
     print("Running Claude Code review...")
-    try:
-        output = asyncio.run(
-            _run_review(prompt_content, claude_model, max_turns, cwd)
-        )
-    except Exception as exc:
-        print(f"Error: Claude Code SDK failed: {exc}", file=sys.stderr)
-        print("[debug] Full traceback:", file=sys.stderr)
-        traceback.print_exc(file=sys.stderr)
-        output = ""
+    sys.stdout.flush()
+    output = asyncio.run(
+        _run_review(prompt_content, claude_model, max_turns, cwd)
+    )
 
     if output:
         print(output)
