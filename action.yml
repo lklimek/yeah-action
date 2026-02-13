@@ -49,7 +49,7 @@ runs:
   steps:
     # Step 0: Install Python dependencies (GitPython, PyGithub, etc.).
     - name: Install Python dependencies
-      run: pip install -r ${{ github.action_path }}/requirements.txt
+      run: pip install -q -r ${{ github.action_path }}/requirements.txt
       shell: bash
 
     # Step 1: Detect which dependencies have changed in the pull request.
