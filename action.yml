@@ -81,13 +81,7 @@ runs:
         DEPENDENCIES: ${{ steps.detect.outputs.dependencies }}
         INPUT_DEPENDENCY: ${{ inputs.dependency }}
 
-    # Step 4: Setup Node.js and install the Claude Code CLI.
-    - name: Setup Node.js
-      if: steps.detect.outputs.has_changes == 'true'
-      uses: actions/setup-node@v4
-      with:
-        node-version: "20"
-
+    # Step 4: Install the Claude Code CLI (required by claude-agent-sdk).
     - name: Install Claude Code CLI
       if: steps.detect.outputs.has_changes == 'true'
       run: npm install -g @anthropic-ai/claude-code
@@ -101,7 +95,6 @@ runs:
       shell: bash
       env:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
-        CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "true"
         CLAUDE_MODEL: ${{ inputs.model }}
         MAX_TURNS: ${{ inputs.max_turns }}
         PROMPT_FILE: ${{ steps.prompt.outputs.prompt_file }}
