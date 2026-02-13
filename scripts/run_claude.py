@@ -6,9 +6,9 @@ Runs the Claude Code security review using the claude-agent-sdk Python
 package. Captures the review output to a file and exposes it via
 GITHUB_OUTPUT.
 
-Requires the claude-agent-sdk Python package to be installed and the
-ANTHROPIC_API_KEY, CLAUDE_MODEL, MAX_TURNS, and PROMPT_FILE
-environment variables to be set.
+Requires the claude-agent-sdk Python package and Claude Code CLI to be
+installed, and the ANTHROPIC_API_KEY, CLAUDE_MODEL, MAX_TURNS, and
+PROMPT_FILE environment variables to be set.
 """
 
 import asyncio

@@ -77,10 +77,20 @@ def main():
 
     print(f"Searching for existing review comment on PR #{pr_number}...")
     existing_comment = None
+    duplicate_count = 0
     for comment in pr.get_issue_comments():
         if _MARKER in comment.body:
-            existing_comment = comment
-            break
+            if existing_comment is None:
+                existing_comment = comment
+            else:
+                duplicate_count += 1
+                print(f"Warning: Found duplicate comment (ID: {comment.id}). "
+                      "Consider deleting manually.", file=sys.stderr)
+
+    if duplicate_count > 0:
+        print(f"Warning: Found {duplicate_count} duplicate comment(s) with "
+              f"the same marker. Only the first will be updated.",
+              file=sys.stderr)
 
     if existing_comment:
         print(f"Updating existing comment (ID: {existing_comment.id})...")

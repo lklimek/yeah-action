@@ -1,8 +1,10 @@
 # Dependency Security Review
 
-Perform a security-focused review of a dependency update.
+Perform a security-focused review of one or more dependency updates.
 
-**Argument**: `$ARGUMENTS` — the dependency name (e.g., `github.com/lib/pq`, `express`, `tokio`), optionally with version range (e.g., `github.com/lib/pq 1.11.1..1.11.2`). If empty, auto-detect from the current branch by diffing the dependency manifest against the main branch.
+**Argument**: `$ARGUMENTS` — comma-separated list of dependencies to review (e.g., `github.com/lib/pq 1.11.1..1.11.2,tokio 1.36.0..1.37.0`), optionally with version ranges. If empty, auto-detect from the current branch by diffing the dependency manifest against the main branch.
+
+**IMPORTANT**: If multiple dependencies are provided, review each one separately and provide a consolidated report covering all of them. Do not duplicate content for each dependency.
 
 ## 1. Identify the Dependency Change
 
