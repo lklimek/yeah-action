@@ -6,8 +6,9 @@ Runs the Claude Code security review using the claude-agent-sdk Python
 package. Captures the review output to a file and exposes it via
 GITHUB_OUTPUT.
 
-Requires the @anthropic-ai/claude-code npm package to be installed
-(handled by the action.yml workflow).
+Requires the claude-agent-sdk Python package to be installed and the
+ANTHROPIC_API_KEY, CLAUDE_MODEL, MAX_TURNS, and PROMPT_FILE
+environment variables to be set.
 """
 
 import asyncio
@@ -116,7 +117,7 @@ def main():
         sys.exit(1)
 
     fd, review_file = tempfile.mkstemp(
-        prefix="yeah-action-review-", suffix=".md", dir="/tmp"
+        prefix="yeah-action-review-", suffix=".md"
     )
     os.close(fd)
 

@@ -128,12 +128,15 @@ def _auto_detect_mode():
                 f"origin/{default_branch}", "HEAD",
             ).strip()
         except git.GitCommandError:
+            # Intentionally ignore: will fall back to using the previous commit
             pass
 
         if not base_sha:
             try:
                 base_sha = repo.git.rev_parse("HEAD~1").strip()
             except git.GitCommandError:
+                # Intentionally ignore: if this also fails, BASE_SHA will be
+                # reported as undeterminable below and the script will exit
                 pass
 
         if not base_sha:
@@ -227,7 +230,7 @@ def _auto_detect_mode():
     dependencies = ",".join(all_deps)
     has_changes = "true"
 
-    print(f"\nSummary:")
+    print("\nSummary:")
     print(f"  ecosystem:    {ecosystem}")
     print(f"  dependencies: {dependencies}")
     print(f"  has_changes:  {has_changes}")
