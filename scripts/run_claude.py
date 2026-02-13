@@ -13,6 +13,7 @@ PROMPT_FILE environment variables to be set.
 
 import asyncio
 import os
+import secrets
 import shutil
 import sys
 import tempfile
@@ -62,11 +63,22 @@ async def _run_review(prompt_content, claude_model, max_turns):
                 model=claude_model,
                 max_turns=int(max_turns),
                 permission_mode="bypassPermissions",
+                allowed_tools=[
+                    "Read",
+                    "Glob",
+                    "Grep",
+                    "Bash",
+                    "WebSearch",
+                    "WebFetch",
+                    "Task",
+                ],
             ),
         ):
             if isinstance(message, ResultMessage):
-                print(f"[debug] ResultMessage received "
-                      f"(length={len(message.result) if message.result else 0})")
+                print(
+                    f"[debug] ResultMessage received "
+                    f"(length={len(message.result) if message.result else 0})"
+                )
                 if message.result:
                     result_text = message.result
 
@@ -87,16 +99,20 @@ async def _run_review(prompt_content, claude_model, max_turns):
             elif isinstance(message, AssistantMessage):
                 for block in message.content:
                     if isinstance(block, TextBlock):
-                        print(f"[debug] AssistantMessage TextBlock "
-                              f"(length={len(block.text)})")
+                        print(
+                            f"[debug] AssistantMessage TextBlock "
+                            f"(length={len(block.text)})"
+                        )
                         assistant_parts.append(block.text)
     except Exception as exc:
         error_message = str(exc)
         print(f"Warning: Claude Code stream error: {exc}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
         if assistant_parts:
-            print(f"[debug] Returning {len(assistant_parts)} partial result(s) "
-                  f"collected before the error")
+            print(
+                f"[debug] Returning {len(assistant_parts)} partial result(s) "
+                f"collected before the error"
+            )
 
     # Use the authoritative ResultMessage output when available; fall back
     # to collected AssistantMessage text blocks on SDK crash.
@@ -110,7 +126,6 @@ async def _run_review(prompt_content, claude_model, max_turns):
             "\n\n---\n"
             "> **Warning**: The Claude Code review encountered an error and "
             "may be incomplete.\n"
-            f"> Error: `{error_message}`\n"
             "> Please review the dependency changes manually.\n"
         )
         output = output + notice if output else notice
@@ -134,17 +149,37 @@ def main():
     has_api_key = bool(os.environ.get("ANTHROPIC_API_KEY"))
     has_oauth = bool(os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"))
     if not has_api_key and not has_oauth:
-        print("Error: Either ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN "
-              "must be set", file=sys.stderr)
+        print(
+            "Error: Either ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN must be set",
+            file=sys.stderr,
+        )
         sys.exit(1)
     if has_api_key and has_oauth:
-        print("Warning: Both ANTHROPIC_API_KEY and CLAUDE_CODE_OAUTH_TOKEN "
-              "are set. Claude Code may show an auth conflict warning.",
-              file=sys.stderr)
+        print(
+            "Warning: Both ANTHROPIC_API_KEY and CLAUDE_CODE_OAUTH_TOKEN "
+            "are set. Claude Code may show an auth conflict warning.",
+            file=sys.stderr,
+        )
 
     claude_model = os.environ["CLAUDE_MODEL"]
-    max_turns = os.environ["MAX_TURNS"]
+    max_turns_str = os.environ["MAX_TURNS"]
     prompt_file = os.environ["PROMPT_FILE"]
+
+    try:
+        max_turns = int(max_turns_str)
+    except ValueError:
+        print(
+            f"Error: MAX_TURNS must be an integer, got '{max_turns_str}'",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if not 1 <= max_turns <= 200:
+        print(
+            f"Error: MAX_TURNS must be between 1 and 200, got {max_turns}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     print(f"[debug] claude_model={claude_model}")
     print(f"[debug] max_turns={max_turns}")
@@ -154,19 +189,18 @@ def main():
     claude_cli = shutil.which("claude")
     print(f"[debug] claude CLI path: {claude_cli}")
     if not claude_cli:
-        print("Error: 'claude' CLI not found on PATH. "
-              "Install with: npm install -g @anthropic-ai/claude-code",
-              file=sys.stderr)
+        print(
+            "Error: 'claude' CLI not found on PATH. "
+            "Install with: npm install -g @anthropic-ai/claude-code",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
-    fd, review_file = tempfile.mkstemp(
-        prefix="yeah-action-review-", suffix=".md"
-    )
+    fd, review_file = tempfile.mkstemp(prefix="yeah-action-review-", suffix=".md")
     os.close(fd)
 
     if not os.path.isfile(prompt_file):
-        print(f"Error: Prompt file not found at {prompt_file}",
-              file=sys.stderr)
+        print(f"Error: Prompt file not found at {prompt_file}", file=sys.stderr)
         sys.exit(1)
 
     with open(prompt_file) as f:
@@ -183,6 +217,16 @@ def main():
         "num_turns": 0,
     }
 
+    # Strip sensitive tokens from the environment to prevent potential
+    # exfiltration through Claude's tool use.
+    for var in (
+        "GITHUB_TOKEN",
+        "GH_TOKEN",
+        "ACTIONS_RUNTIME_TOKEN",
+        "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
+    ):
+        os.environ.pop(var, None)
+
     try:
         output, usage_info = asyncio.run(
             _run_review(prompt_content, claude_model, max_turns)
@@ -192,7 +236,6 @@ def main():
         traceback.print_exc(file=sys.stderr)
         output = (
             "> **Error**: The Claude Code review failed to run.\n"
-            f"> Error: `{exc}`\n"
             "> Please review the dependency changes manually.\n"
         )
 
@@ -213,14 +256,17 @@ def main():
     if github_output:
         with open(github_output, "a") as f:
             f.write(f"review_file={review_file}\n")
-            f.write("review<<YEAH_ACTION_EOF\n")
+            delimiter = secrets.token_hex(16)
+            f.write(f"review<<{delimiter}\n")
             f.write(output[:65000])
             f.write("\n")
-            f.write("YEAH_ACTION_EOF\n")
+            f.write(f"{delimiter}\n")
             f.write(f"input_tokens={usage_info['input_tokens']}\n")
             f.write(f"output_tokens={usage_info['output_tokens']}\n")
-            f.write(f"total_tokens={usage_info['input_tokens'] + usage_info['output_tokens']}\n")
-            if usage_info['total_cost_usd'] is not None:
+            f.write(
+                f"total_tokens={usage_info['input_tokens'] + usage_info['output_tokens']}\n"
+            )
+            if usage_info["total_cost_usd"] is not None:
                 f.write(f"total_cost_usd={usage_info['total_cost_usd']:.6f}\n")
             else:
                 f.write("total_cost_usd=\n")

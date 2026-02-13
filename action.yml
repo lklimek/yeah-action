@@ -82,6 +82,11 @@ runs:
       if: steps.detect.outputs.has_changes == 'true'
       run: |
         ECOSYSTEM="${{ steps.detect.outputs.ecosystem }}"
+        # Validate ecosystem value to prevent injection
+        case "$ECOSYSTEM" in
+          go|rust|mixed|none|unknown) ;;
+          *) echo "::error::Invalid ecosystem value: '$ECOSYSTEM'"; exit 1 ;;
+        esac
         TOOLS=""
         if [ "$ECOSYSTEM" = "go" ] || [ "$ECOSYSTEM" = "mixed" ]; then
           if command -v go &>/dev/null; then
@@ -143,6 +148,8 @@ runs:
       run: |
         [ -z "$_OAUTH" ] && unset CLAUDE_CODE_OAUTH_TOKEN
         [ -z "$_APIKEY" ] && unset ANTHROPIC_API_KEY
+        # Strip sensitive GitHub tokens to prevent leakage to Claude
+        unset GITHUB_TOKEN GH_TOKEN ACTIONS_RUNTIME_TOKEN ACTIONS_ID_TOKEN_REQUEST_TOKEN
         python3 ${{ github.action_path }}/scripts/run_claude.py
       shell: bash
       env:

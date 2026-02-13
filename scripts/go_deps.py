@@ -12,28 +12,16 @@ Output format (one per line):
     module                            (version unknown)
 """
 
+import os
 import sys
 
 import git
 
+_SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
 
-def _show_file(repo, sha, path):
-    """Return file content at a specific commit, or empty string on failure."""
-    try:
-        return repo.git.show(f"{sha}:{path}")
-    except git.GitCommandError:
-        return ""
-
-
-def _changed_files(repo, base_sha, head_sha, *patterns):
-    """Return list of changed files matching git pathspec patterns."""
-    try:
-        output = repo.git.diff(
-            "--name-only", f"{base_sha}...{head_sha}", "--", *patterns,
-        )
-        return [f for f in output.splitlines() if f.strip()]
-    except git.GitCommandError:
-        return []
+from git_utils import show_file, changed_files, format_dep  # noqa: E402
 
 
 def _parse_gomod(content):
@@ -112,8 +100,8 @@ def _parse_gosum(content):
 
 def _deps_from_gomod(repo, base_sha, head_sha, gomod_path):
     """Compare old/new go.mod and return {module: (old_ver, new_ver)}."""
-    old_content = _show_file(repo, base_sha, gomod_path)
-    new_content = _show_file(repo, head_sha, gomod_path)
+    old_content = show_file(repo, base_sha, gomod_path)
+    new_content = show_file(repo, head_sha, gomod_path)
 
     old_deps = _parse_gomod(old_content)
     new_deps = _parse_gomod(new_content)
@@ -131,8 +119,8 @@ def _deps_from_gosum(repo, base_sha, head_sha, gosum_path):
 
     Detects transitive dependency changes not listed in go.mod.
     """
-    old_content = _show_file(repo, base_sha, gosum_path)
-    new_content = _show_file(repo, head_sha, gosum_path)
+    old_content = show_file(repo, base_sha, gosum_path)
+    new_content = show_file(repo, head_sha, gosum_path)
 
     old_sums = _parse_gosum(old_content)
     new_sums = _parse_gosum(new_content)
@@ -151,15 +139,6 @@ def _deps_from_gosum(repo, base_sha, head_sha, gosum_path):
     return results
 
 
-def _format_dep(name, old_ver, new_ver):
-    """Format a single dependency change as a string."""
-    if old_ver and new_ver and old_ver != new_ver:
-        return f"{name}@{old_ver}..{new_ver}"
-    elif new_ver:
-        return f"{name}@{new_ver}"
-    return name
-
-
 def get_go_deps(base_sha, head_sha, repo=None):
     """Return list of Go dependency change strings between two commits.
 
@@ -175,8 +154,8 @@ def get_go_deps(base_sha, head_sha, repo=None):
     if repo is None:
         repo = git.Repo(".", search_parent_directories=True)
 
-    gomod_files = _changed_files(repo, base_sha, head_sha, "**/go.mod", "go.mod")
-    gosum_files = _changed_files(repo, base_sha, head_sha, "**/go.sum", "go.sum")
+    gomod_files = changed_files(repo, base_sha, head_sha, "**/go.mod", "go.mod")
+    gosum_files = changed_files(repo, base_sha, head_sha, "**/go.sum", "go.sum")
 
     # go.sum first (lower priority), then go.mod overwrites for direct deps.
     deps = {}
@@ -185,7 +164,7 @@ def get_go_deps(base_sha, head_sha, repo=None):
     for path in gomod_files:
         deps.update(_deps_from_gomod(repo, base_sha, head_sha, path))
 
-    return [_format_dep(mod, old, new) for mod, (old, new) in deps.items()]
+    return [format_dep(mod, old, new) for mod, (old, new) in deps.items()]
 
 
 if __name__ == "__main__":

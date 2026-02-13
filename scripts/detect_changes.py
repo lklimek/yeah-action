@@ -25,27 +25,42 @@ from pathlib import PurePosixPath
 
 import git
 
-# Add scripts directory to path for sibling module imports.
-_SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
-if _SCRIPTS_DIR not in sys.path:
-    sys.path.insert(0, _SCRIPTS_DIR)
+import importlib.util
 
-from go_deps import get_go_deps  # noqa: E402
-from rust_deps import get_rust_deps  # noqa: E402
+
+def _import_sibling(name):
+    """Import a sibling module by file path without modifying sys.path."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"{name}.py")
+    spec = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+get_go_deps = _import_sibling("go_deps").get_go_deps
+get_rust_deps = _import_sibling("rust_deps").get_rust_deps
 
 
 def _set_output(key, value):
-    """Write a key=value pair to GITHUB_OUTPUT."""
+    """Write a key=value pair to GITHUB_OUTPUT.
+
+    Strips newline and carriage-return characters from values to prevent
+    output injection via crafted dependency names or ecosystem strings.
+    """
     output_file = os.environ.get("GITHUB_OUTPUT", "")
     if output_file:
+        sanitized = str(value).replace("\n", "").replace("\r", "")
         with open(output_file, "a") as f:
-            f.write(f"{key}={value}\n")
+            f.write(f"{key}={sanitized}\n")
 
 
 def _has_cargo_toml():
     """Check if a Cargo.toml exists within 3 levels of the current directory."""
-    for root, _dirs, files in os.walk("."):
-        if root.count(os.sep) > 3:
+    start = "."
+    for root, _dirs, files in os.walk(start):
+        rel = os.path.relpath(root, start)
+        depth = 0 if rel == "." else rel.count(os.sep) + 1
+        if depth > 3:
             continue
         if "Cargo.toml" in files:
             return True
@@ -57,7 +72,7 @@ def _infer_ecosystem(dep_name):
 
     Returns "go" if the name looks like a Go module path (e.g.
     ``github.com/lib/pq``), "rust" if a Cargo.toml is found nearby,
-    or "go" as fallback.
+    or "unknown" as fallback.
     """
     # Strip version range if present (e.g. "github.com/lib/pq 1.10.0..1.10.9")
     name = dep_name.strip().split()[0]
@@ -66,7 +81,7 @@ def _infer_ecosystem(dep_name):
         return "go"
     if _has_cargo_toml():
         return "rust"
-    return "go"
+    return "unknown"
 
 
 def _force_mode():
@@ -81,6 +96,15 @@ def _force_mode():
     print(f"Force mode: {len(deps)} dependency(ies) provided")
 
     explicit_ecosystem = os.environ.get("INPUT_ECOSYSTEM", "")
+    _VALID_ECOSYSTEMS = {"go", "rust", ""}
+
+    if explicit_ecosystem and explicit_ecosystem not in _VALID_ECOSYSTEMS:
+        print(
+            f"Error: Invalid ecosystem '{explicit_ecosystem}'. "
+            f"Must be one of: {', '.join(sorted(e for e in _VALID_ECOSYSTEMS if e))}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     if explicit_ecosystem:
         ecosystem = explicit_ecosystem
@@ -107,8 +131,7 @@ def _auto_detect_mode():
 
     action_path = os.environ.get("ACTION_PATH", "")
     if not action_path:
-        print("Error: ACTION_PATH environment variable is required",
-              file=sys.stderr)
+        print("Error: ACTION_PATH environment variable is required", file=sys.stderr)
         sys.exit(1)
 
     repo = git.Repo(".", search_parent_directories=True)
@@ -125,7 +148,8 @@ def _auto_detect_mode():
 
         try:
             base_sha = repo.git.merge_base(
-                f"origin/{default_branch}", "HEAD",
+                f"origin/{default_branch}",
+                "HEAD",
             ).strip()
         except git.GitCommandError:
             # Intentionally ignore: will fall back to using the previous commit
@@ -154,7 +178,8 @@ def _auto_detect_mode():
 
     try:
         changed_files = repo.git.diff(
-            "--name-only", f"{base_sha}...{head_sha}",
+            "--name-only",
+            f"{base_sha}...{head_sha}",
         ).strip()
     except git.GitCommandError:
         changed_files = ""
@@ -170,12 +195,9 @@ def _auto_detect_mode():
     print(changed_files)
 
     file_list = [f for f in changed_files.splitlines() if f.strip()]
-    has_go = any(
-        PurePosixPath(f).name in ("go.mod", "go.sum") for f in file_list
-    )
+    has_go = any(PurePosixPath(f).name in ("go.mod", "go.sum") for f in file_list)
     has_rust = any(
-        PurePosixPath(f).name in ("Cargo.toml", "Cargo.lock")
-        for f in file_list
+        PurePosixPath(f).name in ("Cargo.toml", "Cargo.lock") for f in file_list
     )
 
     if has_go:
@@ -203,8 +225,10 @@ def _auto_detect_mode():
             print("Go dependencies changed:")
             print("\n".join(go_deps))
         else:
-            print("Go manifest files changed but no individual dependency "
-                  "changes detected")
+            print(
+                "Go manifest files changed but no individual dependency "
+                "changes detected"
+            )
 
     if has_rust:
         print("Extracting Rust dependency changes...")
@@ -216,8 +240,10 @@ def _auto_detect_mode():
             print("Rust dependencies changed:")
             print("\n".join(rust_deps))
         else:
-            print("Rust manifest files changed but no individual dependency "
-                  "changes detected")
+            print(
+                "Rust manifest files changed but no individual dependency "
+                "changes detected"
+            )
 
     if has_go and has_rust:
         ecosystem = "mixed"
@@ -227,6 +253,17 @@ def _auto_detect_mode():
         ecosystem = "rust"
 
     all_deps = go_deps + rust_deps
+
+    if not all_deps:
+        print(
+            "Dependency manifest files changed but no individual "
+            "dependency changes detected"
+        )
+        _set_output("has_changes", "false")
+        _set_output("ecosystem", "none")
+        _set_output("dependencies", "")
+        return
+
     dependencies = ",".join(all_deps)
     has_changes = "true"
 

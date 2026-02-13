@@ -12,6 +12,7 @@ Output format (one per line):
     crate                            (version unknown)
 """
 
+import os
 import sys
 
 import git
@@ -21,24 +22,11 @@ try:
 except ImportError:
     import tomli as tomllib
 
+_SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
 
-def _show_file(repo, sha, path):
-    """Return file content at a specific commit, or empty string on failure."""
-    try:
-        return repo.git.show(f"{sha}:{path}")
-    except git.GitCommandError:
-        return ""
-
-
-def _changed_files(repo, base_sha, head_sha, *patterns):
-    """Return list of changed files matching git pathspec patterns."""
-    try:
-        output = repo.git.diff(
-            "--name-only", f"{base_sha}...{head_sha}", "--", *patterns,
-        )
-        return [f for f in output.splitlines() if f.strip()]
-    except git.GitCommandError:
-        return []
+from git_utils import show_file, changed_files, format_dep  # noqa: E402
 
 
 def _versions_from_toml(content):
@@ -54,7 +42,8 @@ def _versions_from_toml(content):
     versions = {}
     try:
         parsed = tomllib.loads(content)
-    except Exception:
+    except Exception as exc:
+        print(f"Warning: Failed to parse Cargo.toml: {exc}", file=sys.stderr)
         return versions
 
     dep_keys = ("dependencies", "dev-dependencies", "build-dependencies")
@@ -89,8 +78,8 @@ def _versions_from_toml(content):
 
 def _deps_from_cargo_toml(repo, base_sha, head_sha, cargo_path):
     """Compare old/new Cargo.toml and return {crate: (old_ver, new_ver)}."""
-    old_content = _show_file(repo, base_sha, cargo_path)
-    new_content = _show_file(repo, head_sha, cargo_path)
+    old_content = show_file(repo, base_sha, cargo_path)
+    new_content = show_file(repo, head_sha, cargo_path)
 
     old_versions = _versions_from_toml(old_content)
     new_versions = _versions_from_toml(new_content)
@@ -104,7 +93,7 @@ def _deps_from_cargo_toml(repo, base_sha, head_sha, cargo_path):
 
 
 def _parse_lock(content):
-    """Parse a Cargo.lock string and return {package_name: version}."""
+    """Parse a Cargo.lock string and return {package_name: set(versions)}."""
     if not content:
         return {}
 
@@ -115,37 +104,28 @@ def _parse_lock(content):
             name = pkg.get("name", "")
             ver = pkg.get("version", "")
             if name and ver:
-                pkgs[name] = ver
-    except Exception:
-        # If the lock file cannot be parsed, treat it as having no packages.
-        pass
+                pkgs.setdefault(name, set()).add(ver)
+    except Exception as exc:
+        print(f"Warning: Failed to parse Cargo.lock: {exc}", file=sys.stderr)
     return pkgs
 
 
 def _deps_from_cargo_lock(repo, base_sha, head_sha, lock_path):
     """Compare old/new Cargo.lock and return {crate: (old_ver, new_ver)}."""
-    old_content = _show_file(repo, base_sha, lock_path)
-    new_content = _show_file(repo, head_sha, lock_path)
-
+    old_content = show_file(repo, base_sha, lock_path)
+    new_content = show_file(repo, head_sha, lock_path)
     old_pkgs = _parse_lock(old_content)
     new_pkgs = _parse_lock(new_content)
-
     results = {}
-    for name, new_ver in new_pkgs.items():
-        old_ver = old_pkgs.get(name)
-        if old_ver != new_ver:
+    for name, new_versions in new_pkgs.items():
+        old_versions = old_pkgs.get(name, set())
+        added = new_versions - old_versions
+        removed = old_versions - new_versions
+        if added:
+            new_ver = sorted(added)[-1]
+            old_ver = sorted(removed)[0] if removed else None
             results[name] = (old_ver, new_ver)
-
     return results
-
-
-def _format_dep(name, old_ver, new_ver):
-    """Format a single dependency change as a string."""
-    if old_ver and new_ver and old_ver != new_ver:
-        return f"{name}@{old_ver}..{new_ver}"
-    elif new_ver:
-        return f"{name}@{new_ver}"
-    return name
 
 
 def get_rust_deps(base_sha, head_sha, repo=None):
@@ -163,11 +143,19 @@ def get_rust_deps(base_sha, head_sha, repo=None):
     if repo is None:
         repo = git.Repo(".", search_parent_directories=True)
 
-    toml_files = _changed_files(
-        repo, base_sha, head_sha, "**/Cargo.toml", "Cargo.toml",
+    toml_files = changed_files(
+        repo,
+        base_sha,
+        head_sha,
+        "**/Cargo.toml",
+        "Cargo.toml",
     )
-    lock_files = _changed_files(
-        repo, base_sha, head_sha, "**/Cargo.lock", "Cargo.lock",
+    lock_files = changed_files(
+        repo,
+        base_sha,
+        head_sha,
+        "**/Cargo.lock",
+        "Cargo.lock",
     )
 
     # Cargo.lock first (lower priority), then Cargo.toml overwrites.
@@ -177,7 +165,7 @@ def get_rust_deps(base_sha, head_sha, repo=None):
     for path in toml_files:
         deps.update(_deps_from_cargo_toml(repo, base_sha, head_sha, path))
 
-    return [_format_dep(c, old, new) for c, (old, new) in deps.items()]
+    return [format_dep(c, old, new) for c, (old, new) in deps.items()]
 
 
 if __name__ == "__main__":

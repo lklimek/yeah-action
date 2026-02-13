@@ -14,9 +14,6 @@ Detect the project ecosystem and locate the dependency manifest:
 |---|---|
 | Go | `go.mod`, `go.sum` |
 | Rust | `Cargo.toml`, `Cargo.lock` |
-| Python | `pyproject.toml`, `requirements*.txt`, `Pipfile.lock`, `poetry.lock` |
-| Node.js | `package.json`, `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml` |
-| Other | Identify automatically |
 
 Diff the manifest against the base branch to extract: package name, old version, new version, and any other dependency changes bundled in the same commit.
 

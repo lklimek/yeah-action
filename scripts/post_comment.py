@@ -27,8 +27,7 @@ def main():
     dependencies = os.environ.get("DEPENDENCIES", "none")
     github_repo = os.environ.get("GITHUB_REPOSITORY", "")
     step_summary = os.environ.get("GITHUB_STEP_SUMMARY", os.devnull)
-    action_repo = os.environ.get("GITHUB_ACTION_REPOSITORY",
-                                 "lklimek/yeah-action")
+    action_repo = os.environ.get("GITHUB_ACTION_REPOSITORY", "lklimek/yeah-action")
     pr_number = os.environ.get("PR_NUMBER", "0") or "0"
 
     # Read token usage information
@@ -42,8 +41,7 @@ def main():
         sys.exit(1)
 
     if not os.path.isfile(review_file):
-        print(f"Error: Review file not found at {review_file}",
-              file=sys.stderr)
+        print(f"Error: Review file not found at {review_file}", file=sys.stderr)
         sys.exit(1)
 
     with open(review_file) as f:
@@ -92,9 +90,25 @@ def main():
 
     max_length = 65000
     if len(comment_body) > max_length:
-        print(f"Warning: Comment body exceeds {max_length} characters; "
-              "truncating.")
-        comment_body = comment_body[:max_length] + "\n\n... (truncated)"
+        print(f"Warning: Comment body exceeds {max_length} characters; truncating.")
+        truncated = comment_body[:max_length]
+
+        # Find the last paragraph boundary (double newline) before max_length,
+        # but only if it's in the latter half to avoid excessive truncation.
+        last_para = truncated.rfind("\n\n")
+        if last_para > max_length // 2:
+            truncated = truncated[:last_para]
+
+        # Close any open code blocks to prevent broken markdown rendering.
+        if truncated.count("```") % 2 != 0:
+            truncated += "\n```"
+
+        truncated += (
+            "\n\n---\n"
+            "> **Note**: This review was truncated due to length. "
+            "See the full review in the workflow logs."
+        )
+        comment_body = truncated
 
     if pr_number == "0":
         print("No pull request context detected. Writing to step summary.")
@@ -104,37 +118,41 @@ def main():
         print("Review written to GITHUB_STEP_SUMMARY.")
         return
 
-    g = Github(auth=Auth.Token(token))
-    repo = g.get_repo(github_repo)
-    pr = repo.get_pull(int(pr_number))
+    with Github(auth=Auth.Token(token)) as g:
+        repo = g.get_repo(github_repo)
+        pr = repo.get_pull(int(pr_number))
 
-    print(f"Searching for existing review comment on PR #{pr_number}...")
-    existing_comment = None
-    duplicate_count = 0
-    for comment in pr.get_issue_comments():
-        if _MARKER in comment.body:
-            if existing_comment is None:
-                existing_comment = comment
-            else:
-                duplicate_count += 1
-                print(f"Warning: Found duplicate comment (ID: {comment.id}). "
-                      "Consider deleting manually.", file=sys.stderr)
+        print(f"Searching for existing review comment on PR #{pr_number}...")
+        existing_comment = None
+        duplicate_count = 0
+        for comment in pr.get_issue_comments():
+            if _MARKER in comment.body:
+                if existing_comment is None:
+                    existing_comment = comment
+                else:
+                    duplicate_count += 1
+                    print(
+                        f"Warning: Found duplicate comment (ID: {comment.id}). "
+                        "Consider deleting manually.",
+                        file=sys.stderr,
+                    )
 
-    if duplicate_count > 0:
-        print(f"Warning: Found {duplicate_count} duplicate comment(s) with "
-              f"the same marker. Only the first will be updated.",
-              file=sys.stderr)
+        if duplicate_count > 0:
+            print(
+                f"Warning: Found {duplicate_count} duplicate comment(s) with "
+                f"the same marker. Only the first will be updated.",
+                file=sys.stderr,
+            )
 
-    if existing_comment:
-        print(f"Updating existing comment (ID: {existing_comment.id})...")
-        existing_comment.edit(comment_body)
-        print("Comment updated.")
-    else:
-        print(f"Creating new comment on PR #{pr_number}...")
-        pr.create_issue_comment(comment_body)
-        print("Comment created.")
+        if existing_comment:
+            print(f"Updating existing comment (ID: {existing_comment.id})...")
+            existing_comment.edit(comment_body)
+            print("Comment updated.")
+        else:
+            print(f"Creating new comment on PR #{pr_number}...")
+            pr.create_issue_comment(comment_body)
+            print("Comment created.")
 
-    g.close()
     print("PR comment posted successfully.")
 
 
