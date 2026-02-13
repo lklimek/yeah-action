@@ -2,27 +2,6 @@ name: Test Dependency Security Review
 
 on:
   pull_request:
-    paths:
-      - 'test-projects/go-project/go.mod'
-      - 'test-projects/go-project/go.sum'
-      - 'test-projects/rust-project/Cargo.toml'
-      - 'test-projects/rust-project/Cargo.lock'
-      - '**/go.mod'
-      - '**/Cargo.toml'
-
-  workflow_dispatch:
-    inputs:
-      dependency:
-        description: 'Dependency to review (e.g., github.com/lib/pq 1.10.0..1.10.9, serde 1.0.196..1.0.197)'
-        required: true
-        type: string
-      ecosystem:
-        description: 'Ecosystem of the dependency'
-        required: true
-        type: choice
-        options:
-          - go
-          - rust
 
 permissions:
   contents: read
@@ -42,7 +21,6 @@ jobs:
         uses: ./
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          dependency: ${{ inputs.dependency || '' }}
-          ecosystem: ${{ inputs.ecosystem || '' }}
-          model: sonnet
+          dependency: "github.com/lib/pq 1.10.0..1.10.9,golang.org/x/net 0.21.0..0.23.0,serde 1.0.196..1.0.197,tokio 1.36.0..1.37.0"
+          model: haiku
           max_turns: 50

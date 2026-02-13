@@ -9,10 +9,15 @@ description: "Security audit of changed or updated dependencies using Claude Cod
 
 inputs:
   anthropic_api_key:
-    description: "Anthropic API key for Claude Code"
-    required: true
+    description: "Anthropic API key for Claude Code (required unless oauth_token is set)"
+    required: false
+    default: ""
+  oauth_token:
+    description: "Claude Code OAuth token for subscription-based auth (Pro/Max/Teams/Enterprise). Generate with 'claude setup-token'."
+    required: false
+    default: ""
   dependency:
-    description: "Force review of a specific dependency (e.g., github.com/lib/pq 1.10.0..1.11.0). Bypasses auto-detection."
+    description: "Force review of specific dependencies. Comma-separated for multiple (e.g., github.com/lib/pq 1.10.0..1.11.0,serde 1.0.196..1.0.197). Bypasses auto-detection."
     required: false
     default: ""
   ecosystem:
@@ -44,7 +49,7 @@ runs:
   steps:
     # Step 0: Install Python dependencies (GitPython, PyGithub, etc.).
     - name: Install Python dependencies
-      run: pip install -r ${{ github.action_path }}/requirements.txt
+      run: pip install -q -r ${{ github.action_path }}/requirements.txt
       shell: bash
 
     # Step 1: Detect which dependencies have changed in the pull request.
@@ -81,7 +86,13 @@ runs:
         DEPENDENCIES: ${{ steps.detect.outputs.dependencies }}
         INPUT_DEPENDENCY: ${{ inputs.dependency }}
 
-    # Step 4: Execute the Claude Code security review via the Python SDK.
+    # Step 4: Install the Claude Code CLI (required by claude-agent-sdk).
+    - name: Install Claude Code CLI
+      if: steps.detect.outputs.has_changes == 'true'
+      run: npm install -g @anthropic-ai/claude-code
+      shell: bash
+
+    # Step 5: Execute the Claude Code security review via the Python SDK.
     - name: Run Claude Code review
       id: review
       if: steps.detect.outputs.has_changes == 'true'
@@ -89,15 +100,17 @@ runs:
       shell: bash
       env:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.oauth_token }}
         CLAUDE_MODEL: ${{ inputs.model }}
         MAX_TURNS: ${{ inputs.max_turns }}
         PROMPT_FILE: ${{ steps.prompt.outputs.prompt_file }}
         ECOSYSTEM: ${{ steps.detect.outputs.ecosystem }}
 
-    # Step 5: Post the review results as a comment on the pull request.
+    # Step 6: Post the review results as a comment on the pull request.
+    # Run even if the review step failed so error details appear on the PR.
     - name: Post PR comment
       id: comment
-      if: steps.detect.outputs.has_changes == 'true'
+      if: steps.detect.outputs.has_changes == 'true' && !cancelled()
       run: python3 ${{ github.action_path }}/scripts/post_comment.py
       shell: bash
       env:

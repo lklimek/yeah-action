@@ -52,27 +52,53 @@ def _has_cargo_toml():
     return False
 
 
+def _infer_ecosystem(dep_name):
+    """Infer ecosystem for a single dependency name.
+
+    Returns "go" if the name looks like a Go module path (e.g.
+    ``github.com/lib/pq``), "rust" if a Cargo.toml is found nearby,
+    or "go" as fallback.
+    """
+    # Strip version range if present (e.g. "github.com/lib/pq 1.10.0..1.10.9")
+    name = dep_name.strip().split()[0]
+    first_slash = name.find("/")
+    if first_slash > 0 and "." in name[:first_slash]:
+        return "go"
+    if _has_cargo_toml():
+        return "rust"
+    return "go"
+
+
 def _force_mode():
-    """Handle force mode when INPUT_DEPENDENCY is set."""
-    dep = os.environ["INPUT_DEPENDENCY"]
-    print(f"Force mode: dependency explicitly provided as '{dep}'")
+    """Handle force mode when INPUT_DEPENDENCY is set.
 
-    ecosystem = os.environ.get("INPUT_ECOSYSTEM", "")
+    Supports a single dependency or multiple comma-separated dependencies.
+    When multiple dependencies span both Go and Rust the ecosystem is
+    reported as "mixed".
+    """
+    raw = os.environ["INPUT_DEPENDENCY"]
+    deps = [d.strip() for d in raw.split(",") if d.strip()]
+    print(f"Force mode: {len(deps)} dependency(ies) provided")
 
-    if not ecosystem:
-        first_slash = dep.find("/")
-        if first_slash > 0 and "." in dep[:first_slash]:
+    explicit_ecosystem = os.environ.get("INPUT_ECOSYSTEM", "")
+
+    if explicit_ecosystem:
+        ecosystem = explicit_ecosystem
+    else:
+        ecosystems = {_infer_ecosystem(d) for d in deps}
+        if ecosystems == {"go"}:
             ecosystem = "go"
-        elif _has_cargo_toml():
+        elif ecosystems == {"rust"}:
             ecosystem = "rust"
         else:
-            ecosystem = "go"
+            ecosystem = "mixed"
 
-    print(f"Inferred ecosystem: {ecosystem}")
+    print(f"Dependencies: {', '.join(deps)}")
+    print(f"Ecosystem: {ecosystem}")
 
     _set_output("has_changes", "true")
     _set_output("ecosystem", ecosystem)
-    _set_output("dependencies", dep)
+    _set_output("dependencies", ",".join(deps))
 
 
 def _auto_detect_mode():
